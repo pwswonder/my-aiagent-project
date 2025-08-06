@@ -22,7 +22,7 @@ def create_document(db: Session, doc: schemas.DocumentCreate):
 
 # QA 히스토리
 def save_qa_history(db: Session, qa: schemas.QACreate):
-    db_qa = models.QAHistories(**qa.dict())
+    db_qa = models.QAHistory(**qa.dict())
     db.add(db_qa)
     db.commit()
     db.refresh(db_qa)

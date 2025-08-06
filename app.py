@@ -40,7 +40,6 @@ with st.sidebar:
         st.error(f"문서 목록 조회 실패: {e}")
         doc_list = []
 
-    # ...생략...
 
     if doc_list:
         filenames = [f"{doc['filename']} (ID: {doc['id']})" for doc in doc_list]

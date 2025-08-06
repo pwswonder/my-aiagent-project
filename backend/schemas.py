@@ -15,8 +15,8 @@ class UserCreate(UserBase):
 
 class User(UserBase):
     id: int
-    name: Optional[str]
-    email: Optional[str]
+    name: Optional[str] = Field(default=None)
+    email: Optional[str] = Field(default=None)
     created_at: datetime
 
     class Config:
@@ -45,9 +45,12 @@ class Document(DocumentBase):
 # QA 히스토리
 class QACreate(BaseModel):
     document_id: int
-    user_input: str
-    ai_answer: str
+    question: str = Field(..., alias="user_input")
+    answer: str = Field(..., alias="ai_answer")
 
+    class Config:
+        from_attributes = True
+        populate_by_name = True
 
 class QAHistory(BaseModel):
     id: int
@@ -62,8 +65,10 @@ class QAHistory(BaseModel):
 
 class QAHistoryOut(BaseModel):
     id: int
-    user_input: str
-    ai_answer: str
+    # user_input: str
+    # ai_answer: str
+    question: str
+    answer: str
     created_at: datetime
 
     class Config:
