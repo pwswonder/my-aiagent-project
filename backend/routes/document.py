@@ -74,6 +74,7 @@ async def upload_document(
     document = models.Document(
         user_id=user.id,
         filename=file.filename,
+        file_path=file_path,  
         summary=summary,
         domain=domain,
         uploaded_at=datetime.utcnow(),
@@ -137,3 +138,67 @@ def delete_document(document_id: int, db: Session = Depends(get_db)):
     db.commit()
 
     return {"message": "Document deleted successfully"}
+
+
+
+@router.post("/documents/analyze_only")
+async def analyze_document_only(
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db)
+):
+    user = db.query(models.User).filter_by(id=1).first()
+    if not user:
+        user = models.User(id=1, email="test@example.com")
+        db.add(user)
+        db.commit()
+        db.refresh(user)
+
+    # 중복 문서 검사
+    existing_doc = (
+        db.query(models.Document)
+        .filter(models.Document.user_id == user.id)
+        .filter(models.Document.filename == file.filename)
+        .first()
+    )
+    if existing_doc:
+        return {
+            "message": "File already uploaded.",
+            "document_id": existing_doc.id,
+            "summary": existing_doc.summary,
+            "domain": existing_doc.domain,
+        }
+
+    # 저장
+    file_path = os.path.join(UPLOAD_DIR, file.filename)
+    with open(file_path, "wb") as f:
+        shutil.copyfileobj(file.file, f)
+
+    # 분석
+    file_state = file_reader({"file": file_path})
+    raw_text = file_state["raw_text"]
+
+    graph = build_graph()
+    result = graph.invoke({"raw_text": raw_text})
+
+    summary = result.get("summary", "")
+    domain = result.get("domain", "")
+
+    document = models.Document(
+        user_id=user.id,
+        filename=file.filename,
+        file_path=file_path,  
+        summary=summary,
+        domain=domain,
+        uploaded_at=datetime.utcnow()
+    )
+    db.add(document)
+    db.commit()
+    db.refresh(document)
+
+    return {
+        "message": "Document analyzed.",
+        "document_id": document.id,
+        "summary": summary,
+        "domain": domain,
+    }
+

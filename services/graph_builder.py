@@ -16,32 +16,27 @@ class AgentState(TypedDict, total=False):
     domain: str
     answer: str
 
-# def route(state: AgentState) -> str:
-#     user_input = state["user_input"].lower()
-#     if "요약" in user_input:
-#         return "summary_node"
-#     elif "분류" in user_input or "도메인" in user_input:
-#         return "classify_node"
-#     elif "질문" in user_input or "무엇" in user_input:
-#         return "qa_node"
-#     else:
-#         return "summary_node"
-
 
 def build_graph():
     graph = StateGraph(AgentState)
 
-    # 각 노드 추가
     graph.add_node("embedder", embedder)
     graph.add_node("summary_node", summarizer_agent)
     graph.add_node("classify_node", classifier_agent)
     graph.add_node("qa_node", qa_agent)
 
-    # 실행 흐름 구성 (순차 실행)
     graph.set_entry_point("embedder")
     graph.add_edge("embedder", "summary_node")
     graph.add_edge("summary_node", "classify_node")
-    graph.add_edge("classify_node", "qa_node")
-    graph.add_edge("qa_node", END)
 
+    # QA 노드는 조건부로 실행
+    def should_run_qa(state: AgentState) -> bool:
+        return "user_input" in state and state["user_input"] is not None
+
+    graph.add_conditional_edges("classify_node", should_run_qa, {
+        True: "qa_node",
+        False: END,
+    })
+
+    graph.add_edge("qa_node", END)
     return graph.compile()
