@@ -52,39 +52,48 @@ def get_qa_history(document_id: int, db: Session = Depends(get_db)):
         .all()
     )
 
+
 @router.post("/qa/ask_existing")
 def ask_existing_document_question(
-    payload: schemas.ExistingDocQARequest,
-    db: Session = Depends(get_db)
+    payload: schemas.ExistingDocQARequest, db: Session = Depends(get_db)
 ):
-    document = crud.get_document_by_id(db, payload.document_id)
-    if not document:
-        raise HTTPException(status_code=404, detail="Document not found.")
-
-    # ❗️ 수정: document.path → document.file_path
     try:
-        content = file_reader(document.file_path)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"파일 읽기 실패: {e}")
+        # 1. 문서 조회
+        document = crud.get_document_by_id(db, payload.document_id)
+        if not document:
+            print("[ERROR] 문서를 찾을 수 없습니다.")
+            raise HTTPException(status_code=404, detail="Document not found.")
 
-    # ❗️ 수정: key 이름 통일 (graph input과 동일하게)
-    try:
+        print(f"[DEBUG] 문서 경로: {document.file_path}")
+
+        # 2. 텍스트 추출
+        file_state = file_reader({"file": document.file_path})
+        raw_text = file_state["raw_text"]
+        print(f"[DEBUG] 추출된 텍스트 길이: {len(raw_text)}")
+
+        # 3. 그래프 실행
         graph = build_graph()
-        result = graph.invoke({
-            "raw_text": content,
-            "user_input": payload.question
-        })
+        result = graph.invoke({"raw_text": raw_text, "user_input": payload.question})
+
+        print("[DEBUG] 그래프 결과:", result)
+
+        if "answer" not in result:
+            print("[ERROR] 그래프 결과에 'answer' 없음")
+            raise HTTPException(status_code=500, detail="답변 생성 실패")
+
+        # 4. DB 저장
+        qa_entry = schemas.QACreate(
+            document_id=payload.document_id,
+            user_input=payload.question,
+            ai_answer=result["answer"],
+        )
+        crud.save_qa_history(db, qa=qa_entry)
+
+        return {"answer": result["answer"]}
+
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"에이전트 실행 오류: {e}")
+        import traceback
 
-    if "answer" not in result:
-        raise HTTPException(status_code=500, detail="답변 생성 실패")
-
-    qa_entry = schemas.QACreate(
-        document_id=payload.document_id,
-        user_input=payload.question,
-        ai_answer=result["answer"]
-    )
-    crud.save_qa_history(db, qa=qa_entry)
-
-    return {"answer": result["answer"]}
+        print("🔴 예외 발생:")
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"에러 발생: {e}")

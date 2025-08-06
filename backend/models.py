@@ -7,11 +7,10 @@ from datetime import datetime
 class User(Base):
     __tablename__ = "users"
     id = Column(Integer, primary_key=True)
-    name = Column(String) 
+    name = Column(String)
     email = Column(String, unique=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     documents = relationship("Document", backref="user", cascade="all, delete")
-
 
 
 class Document(Base):
@@ -19,11 +18,11 @@ class Document(Base):
     id = Column(Integer, primary_key=True)
     user_id = Column(Integer, ForeignKey("users.id"))
     filename = Column(String)
+    file_path = Column(String)
     summary = Column(Text)
     domain = Column(String)
     uploaded_at = Column(DateTime, default=datetime.utcnow)
     qa_histories = relationship("QAHistory", backref="document", cascade="all, delete")
-
 
 
 class QAHistory(Base):
