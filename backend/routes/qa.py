@@ -54,37 +54,37 @@ def get_qa_history(document_id: int, db: Session = Depends(get_db)):
 
 @router.post("/qa/ask_existing")
 def ask_existing_document_question(
-    payload: schemas.ExistingDocQARequest,  # document_id + question
+    payload: schemas.ExistingDocQARequest,
     db: Session = Depends(get_db)
 ):
-    # 1. 문서 존재 여부 확인
     document = crud.get_document_by_id(db, payload.document_id)
     if not document:
         raise HTTPException(status_code=404, detail="Document not found.")
 
-    # 2. 문서 내용 읽기
+    # ❗️ 수정: document.path → document.file_path
     try:
-        content = file_reader(document.path)  # PDF에서 텍스트 추출
+        content = file_reader(document.file_path)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"파일 읽기 실패: {e}")
 
-    # 3. LangGraph 에이전트 실행
+    # ❗️ 수정: key 이름 통일 (graph input과 동일하게)
     try:
         graph = build_graph()
-        result = graph.invoke({"document": content, "question": payload.question})
+        result = graph.invoke({
+            "raw_text": content,
+            "user_input": payload.question
+        })
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"에이전트 실행 오류: {e}")
 
     if "answer" not in result:
         raise HTTPException(status_code=500, detail="답변 생성 실패")
 
-    # 4. QA 히스토리 DB 저장
     qa_entry = schemas.QACreate(
         document_id=payload.document_id,
-        question=payload.question,
-        answer=result["answer"]
+        user_input=payload.question,
+        ai_answer=result["answer"]
     )
     crud.save_qa_history(db, qa=qa_entry)
 
-    # 5. 응답 반환
     return {"answer": result["answer"]}
