@@ -5,6 +5,9 @@ from backend.database import SessionLocal, engine, Base
 from typing import List
 from backend.routes import qa, document, user
 
+from dotenv import load_dotenv
+load_dotenv() 
+
 # 테이블 생성
 models.Base.metadata.create_all(bind=engine)
 
