@@ -7,8 +7,10 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+from langsmith import traceable
+
 llm = AzureChatOpenAI(
-    azure_deployment=os.getenv("AOAI_DEPLOY_GPT4O_MINI"),
+    azure_deployment=os.getenv("AOAI_DEPLOY_GPT4O"),
     openai_api_version="2024-02-01",
     api_key=os.getenv("AOAI_API_KEY"),
     azure_endpoint=os.getenv("AOAI_ENDPOINT"),

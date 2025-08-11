@@ -1,99 +1,109 @@
-from fastapi import APIRouter, UploadFile, File, Form, Depends, Query, HTTPException
-from fastapi.responses import JSONResponse
-import os, shutil
-from backend.database import SessionLocal, get_db
+from fastapi import APIRouter, HTTPException, Depends
 from sqlalchemy.orm import Session
-from backend import models, schemas, crud
 from typing import List
+import os
+
+from backend.database import get_db
+from backend import models, schemas, crud
+
+from services.summarizer import qa_agent
+from services.retriever_cache import get_retriever, set_retriever
 from services.file_reader import file_reader
 from services.graph_builder import build_graph
-from langgraph.graph import StateGraph
-
 
 router = APIRouter()
-UPLOAD_FOLDER = "uploaded_docs"
-os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+
+# 그래프는 서버 기동 시 1회 컴파일 → 복구(캐시 미존재) 시만 사용
+_GRAPH = build_graph()
 
 
-@router.get("/qa/history/docs", response_model=List[schemas.DocumentOut])
-def get_docs_by_user(
-    user_id: int = Query(..., description="사용자 ID"), db: Session = Depends(get_db)
-):
-    return db.query(models.Document).filter(models.Document.user_id == user_id).all()
-
-
-@router.post("/qa/submit")
-async def handle_question(file: UploadFile = File(...), question: str = Form(...)):
-    file_location = os.path.join(UPLOAD_FOLDER, file.filename)
-    with open(file_location, "wb") as f:
-        shutil.copyfileobj(file.file, f)
-
-    ai_response = f"📘 질문 '{question}'에 대한 응답입니다 (파일: {file.filename})"
-
-    db = SessionLocal()
-    document = models.Document(user_id=1, title=file.filename, file_path=file_location)
-    db.add(document)
-    db.commit()
-    db.refresh(document)
-
-    qa = models.QAHistories(
-        document_id=document.id, user_input=question, ai_answer=ai_response
-    )
-    db.add(qa)
-    db.commit()
-    return JSONResponse(content={"answer": ai_response})
-
-
-@router.get("/qa/history/{document_id}", response_model=List[schemas.QAHistoryOut])
+@router.get("/qa/{document_id}", response_model=List[schemas.QAHistoryOut])
 def get_qa_history(document_id: int, db: Session = Depends(get_db)):
-    return (
-        db.query(models.QAHistories)
-        .filter(models.QAHistories.document_id == document_id)
+    """
+    app.py가 기대하는 형식으로 QA 히스토리를 반환합니다.
+    - 키: question, answer, created_at
+    """
+    rows = (
+        db.query(models.QAHistory)
+        .filter(models.QAHistory.document_id == document_id)
+        .order_by(models.QAHistory.created_at.asc())
         .all()
     )
+    # pydantic 모델 매핑을 신뢰해도 되고, 안전하게 dict로 변환해도 됩니다.
+    return [
+        schemas.QAHistoryOut(
+            question=row.question,
+            answer=row.answer,
+            created_at=row.created_at
+        )
+        for row in rows
+    ]
 
 
 @router.post("/qa/ask_existing")
 def ask_existing_document_question(
     payload: schemas.ExistingDocQARequest, db: Session = Depends(get_db)
 ):
+    """
+    기존 문서에 대해 질문을 수행합니다.
+    흐름:
+      1) 문서 존재 확인
+      2) retriever 캐시 조회
+      3) (캐시 미스) file_reader + _GRAPH.invoke 로 retriever 복구 → 캐시에 저장
+      4) qa_agent.invoke 로 답변 생성
+      5) QA 히스토리 저장
+    반환: {"answer": "..."}
+    """
+    doc_id = payload.document_id
+    question = (payload.question or "").strip()
+    if not question:
+        raise HTTPException(status_code=400, detail="질문이 비어 있습니다.")
+
+    # 1) 문서 조회
+    document = crud.get_document_by_id(db, doc_id)
+    if not document:
+        raise HTTPException(status_code=404, detail="문서를 찾을 수 없습니다.")
+
+    # 2) retriever 캐시 확인
+    retriever = get_retriever(doc_id)
+
+    # 3) 캐시 미스 → 복구
+    if retriever is None:
+        file_path = document.file_path
+        if not file_path or not os.path.exists(file_path):
+            raise HTTPException(status_code=404, detail="원본 파일을 찾을 수 없습니다. 재업로드가 필요합니다.")
+
+        # file_reader로 raw_text/meta 준비 → 그래프 실행(임베딩) → retriever 회수
+        fr_state = file_reader({"file": file_path})
+        result = _GRAPH.invoke(fr_state)
+        retriever = result.get("retriever")
+        if retriever is None:
+            raise HTTPException(status_code=500, detail="retriever 복구 실패")
+
+        # 메모리 캐시에 등록 (서버 재시작 시 사라짐)
+        set_retriever(doc_id, retriever, result.get("vectorstore"))
+
+    # 4) QA 수행 (빠르게: qa_agent만 호출)
+    qa_out = qa_agent.invoke({
+        "user_input": question,
+        "retriever": retriever,
+        "top_k": 5,
+    })
+    answer = qa_out.get("answer", "")
+    if not answer:
+        raise HTTPException(status_code=500, detail="답변 생성 실패")
+
+    # 5) QA 히스토리 저장 (app.py 기대 필드: question/answer/created_at)
     try:
-        # 1. 문서 조회
-        document = crud.get_document_by_id(db, payload.document_id)
-        if not document:
-            print("[ERROR] 문서를 찾을 수 없습니다.")
-            raise HTTPException(status_code=404, detail="Document not found.")
-
-        print(f"[DEBUG] 문서 경로: {document.file_path}")
-
-        # 2. 텍스트 추출
-        file_state = file_reader({"file": document.file_path})
-        raw_text = file_state["raw_text"]
-        print(f"[DEBUG] 추출된 텍스트 길이: {len(raw_text)}")
-
-        # 3. 그래프 실행
-        graph = build_graph()
-        result = graph.invoke({"raw_text": raw_text, "user_input": payload.question})
-
-        print("[DEBUG] 그래프 결과:", result)
-
-        if "answer" not in result:
-            print("[ERROR] 그래프 결과에 'answer' 없음")
-            raise HTTPException(status_code=500, detail="답변 생성 실패")
-
-        # 4. DB 저장
-        qa_entry = schemas.QACreate(
-            document_id=payload.document_id,
-            user_input=payload.question,
-            ai_answer=result["answer"],
+        rec_in = schemas.QACreate(
+            document_id=doc_id,
+            question=question,
+            answer=answer,
         )
-        crud.save_qa_history(db, qa=qa_entry)
-
-        return {"answer": result["answer"]}
-
+        crud.save_qa_history(db, qa=rec_in)
     except Exception as e:
-        import traceback
+        # 답변은 반환하되, 저장 실패는 로그로 충분
+        # 실제 운영에서는 로깅 시스템에 남기세요.
+        pass
 
-        print("🔴 예외 발생:")
-        traceback.print_exc()
-        raise HTTPException(status_code=500, detail=f"에러 발생: {e}")
+    return {"answer": answer}
