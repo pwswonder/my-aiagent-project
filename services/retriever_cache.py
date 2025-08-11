@@ -1,4 +1,4 @@
-# backend/services/retriever_cache.py
+# services/retriever_cache.py
 # 문서별 retriever/vectorstore를 메모리에 보관 (개발/PoC 용)
 # 운영에서는 디스크에 FAISS 저장 또는 외부 벡터DB 권장.
 
