@@ -177,16 +177,3 @@ def run_model_extractor(raw_text: str) -> Dict[str, Any]:
         }
 
 
-# ------------------------------------------------------------
-# 5) 로컬 단위 테스트 (직접 실행 시)
-#    - python services/model_extractor_agent.py 로 확인 가능
-# ------------------------------------------------------------
-if __name__ == "__main__":
-    demo_text = """
-    3. Proposed Method
-    We propose a hybrid architecture combining a CNN backbone with a Transformer encoder.
-    The CNN extracts local spatial features, while the self-attention layers model global dependencies.
-    Finally, an MLP head produces the logits. Our approach improves robustness on image benchmarks.
-    """
-    result = run_model_extractor(demo_text)
-    print(json.dumps(result, ensure_ascii=False, indent=2))
