@@ -1,23 +1,25 @@
-from fastapi import APIRouter, UploadFile, File, Form, Depends, HTTPException  # ☆ HTTPException 추가
+from fastapi import APIRouter, UploadFile, File, Form, Depends, HTTPException
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 from backend.database import get_db
 from backend import models
 
 from services.file_reader import file_reader
-from services.graph_builder import build_graph
-from services.summarizer import qa_agent  # ☆ 업로드+질문 엔드포인트에서 사용
-from services.retriever_cache import set_retriever  # ☆ retriever 캐시 등록
+from services.graph_builder import (
+    build_graph,
+)  # 그래프 (summary/classify/model_extractor/base_code 포함)
+from services.summarizer import qa_agent  # 업로드+질문 엔드포인트에서 사용
+from services.retriever_cache import set_retriever  # retriever 캐시 등록
 
 import os
 import shutil
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 
 router = APIRouter()
 UPLOAD_DIR = "uploaded_docs"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
-# ☆ 그래프는 서버 구동 시 1회 컴파일 → 매 요청마다 재컴파일 비용 절약
+# 그래프는 서버 구동 시 1회 컴파일 → 매 요청마다 재컴파일 비용 절약
 _GRAPH = build_graph()
 
 
@@ -31,16 +33,16 @@ async def upload_document(
     업로드 + 즉시 질문까지 한번에 처리.
     1) 파일 저장
     2) file_reader로 raw_text/meta 준비
-    3) 그래프 실행(임베딩→요약→분류)
+    3) 그래프 실행(임베딩→요약→분류→모델추출→base code)
     4) Document 저장
     5) retriever 캐시에 보관
     6) qa_agent로 질문 답변 생성
     7) QA 히스토리 저장
+    8) ✅ used_model/base_code 응답 포함 (DB 저장 X, 표시용)
     """
     # 사용자 하드코딩 (id=1) — 운영에서는 인증 연동
     user = db.query(models.User).filter_by(id=1).first()
     if not user:
-        # 존재하지 않으면 생성 (초기 세팅 편의)
         user = models.User(id=1, email="test@example.com")
         db.add(user)
         db.commit()
@@ -61,6 +63,9 @@ async def upload_document(
             "document_id": existing_doc.id,
             "summary": existing_doc.summary,
             "domain": existing_doc.domain,
+            # ✅ 기존 문서의 경우엔 모델/코드가 저장되어 있지 않으므로 None
+            "used_model": None,
+            "base_code": None,
         }
 
     # 1) 파일 저장
@@ -72,25 +77,28 @@ async def upload_document(
     file_state = file_reader({"file": file_path})
     raw_text = file_state.get("raw_text", "")
     if not raw_text:
-        raise HTTPException(status_code=400, detail="PDF에서 텍스트를 추출하지 못했습니다.")
+        raise HTTPException(
+            status_code=400, detail="PDF에서 텍스트를 추출하지 못했습니다."
+        )
 
-    # 3) 그래프 실행 (임베딩 → 요약 → 분류)
-    # ☆ 핵심: raw_text 뿐 아니라 meta도 포함된 state를 그대로 전달
+    # 3) 그래프 실행 (임베딩 → 요약 → 분류 → 모델추출 → base code)
     result = _GRAPH.invoke(file_state)
 
     summary = result.get("summary", "") or ""
     domain = result.get("domain", "") or ""
     retriever = result.get("retriever")
     vectorstore = result.get("vectorstore")
+    used_model = result.get("used_model")  # ✅ 추가
+    base_code = result.get("base_code")  # ✅ 추가
 
-    # 4) Document 저장
+    # 4) Document 저장 (DB 스키마는 그대로: used_model/base_code는 저장하지 않음)
     document = models.Document(
         user_id=user.id,
         filename=file.filename,
         file_path=file_path,
         summary=summary,
         domain=domain,
-        uploaded_at=datetime.utcnow(),
+        uploaded_at=datetime.utcnow(),  # 필요 시 timezone-aware로 개선 가능
     )
     db.add(document)
     db.commit()
@@ -101,11 +109,17 @@ async def upload_document(
         set_retriever(document.id, retriever, vectorstore)
 
     # 6) 업로드와 동시에 받은 질문에 답변 생성 (빠르게: qa_agent만 호출)
-    qa_out = qa_agent.invoke({
-        "user_input": question,
-        "retriever": retriever,
-        "top_k": 5,
-    }) if retriever else {"answer": "retriever가 없어 즉시 QA를 수행할 수 없습니다."}
+    qa_out = (
+        qa_agent.invoke(
+            {
+                "user_input": question,
+                "retriever": retriever,
+                "top_k": 5,
+            }
+        )
+        if retriever
+        else {"answer": "retriever가 없어 즉시 QA를 수행할 수 없습니다."}
+    )
     answer = qa_out.get("answer", "")
 
     # 7) QA 히스토리 저장
@@ -118,7 +132,7 @@ async def upload_document(
     db.add(qa_entry)
     db.commit()
 
-    # 8) 최종 응답
+    # 8) 최종 응답 (✅ used_model/base_code 포함)
     return JSONResponse(
         content={
             "filename": file.filename,
@@ -126,6 +140,8 @@ async def upload_document(
             "domain": domain,
             "answer": answer,
             "document_id": document.id,
+            "used_model": used_model,  # ✅
+            "base_code": base_code,  # ✅
         }
     )
 
@@ -143,6 +159,8 @@ def get_documents(db: Session = Depends(get_db)):
             "domain": doc.domain,
             "summary": doc.summary,
             "uploaded_at": doc.uploaded_at,
+            "base_code": doc.base_code,   # ✅ 추가
+
         }
         for doc in documents
     ]
@@ -173,16 +191,16 @@ def delete_document(document_id: int, db: Session = Depends(get_db)):
 
 @router.post("/documents/analyze_only")
 async def analyze_document_only(
-    file: UploadFile = File(...),
-    db: Session = Depends(get_db)
+    file: UploadFile = File(...), db: Session = Depends(get_db)
 ):
     """
     업로드 → 분석만 수행 (질문 없음)
     1) 파일 저장
     2) file_reader로 state 생성
-    3) 그래프 실행(임베딩→요약→분류)
+    3) 그래프 실행(임베딩→요약→분류→모델추출→base code)
     4) Document 저장
     5) retriever 캐시에 등록
+    6) ✅ used_model/base_code 응답 포함 (DB 저장 X, 표시용)
     """
     # 사용자 하드코딩 (id=1)
     user = db.query(models.User).filter_by(id=1).first()
@@ -206,6 +224,9 @@ async def analyze_document_only(
             "document_id": existing_doc.id,
             "summary": existing_doc.summary,
             "domain": existing_doc.domain,
+            # ✅ 기존 문서의 경우엔 모델/코드가 저장되어 있지 않으므로 None
+            "used_model": None,
+            "base_code": None,
         }
 
     # 1) 파일 저장
@@ -217,7 +238,9 @@ async def analyze_document_only(
     file_state = file_reader({"file": file_path})
     raw_text = file_state.get("raw_text", "")
     if not raw_text:
-        raise HTTPException(status_code=400, detail="PDF에서 텍스트를 추출하지 못했습니다.")
+        raise HTTPException(
+            status_code=400, detail="PDF에서 텍스트를 추출하지 못했습니다."
+        )
 
     # 3) 그래프 실행 (meta 포함 state 전체 전달)
     result = _GRAPH.invoke(file_state)
@@ -226,6 +249,11 @@ async def analyze_document_only(
     domain = result.get("domain", "") or ""
     retriever = result.get("retriever")
     vectorstore = result.get("vectorstore")
+    used_model = result.get("used_model")  # ✅ 추가
+    base_code = result.get("base_code", "") or ""  # ✅ 추가
+
+    KST = timezone(timedelta(hours=9))
+    created_at_str = datetime.now(KST).strftime("%Y-%m-%d %H:%M:%S")
 
     # 4) Document 저장
     document = models.Document(
@@ -234,7 +262,8 @@ async def analyze_document_only(
         file_path=file_path,
         summary=summary,
         domain=domain,
-        uploaded_at=datetime.utcnow()
+        base_code=base_code,       # ✅ DB에 저장
+        uploaded_at=created_at_str,
     )
     db.add(document)
     db.commit()
@@ -244,9 +273,12 @@ async def analyze_document_only(
     if retriever and vectorstore:
         set_retriever(document.id, retriever, vectorstore)
 
+    # 6) 응답 (✅ used_model/base_code 포함)
     return {
         "message": "Document analyzed.",
         "document_id": document.id,
         "summary": summary,
         "domain": domain,
+        "used_model": used_model,  # ✅
+        "base_code": base_code,  # ✅
     }

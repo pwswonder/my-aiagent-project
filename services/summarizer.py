@@ -19,22 +19,24 @@ load_dotenv()
 # 2) LLM 인스턴스 분리
 # - 요약은 사실성/일관성 중요 → temperature 낮게, 토큰 넉넉히
 summary_llm = AzureChatOpenAI(
-    azure_deployment=os.getenv("AOAI_DEPLOY_GPT4O"),
-    openai_api_version="2024-02-01",
+    # azure_deployment=os.getenv("AOAI_DEPLOY_GPT40"),
+    # openai_api_version="2024-02-01",
+    azure_deployment=os.getenv("AOAI_DEPLOY_GPT41"),
+    openai_api_version="2024-10-21",
     api_key=os.getenv("AOAI_API_KEY"),
     azure_endpoint=os.getenv("AOAI_ENDPOINT"),
     temperature=0.1,
-    max_tokens=900,  # 요약 분량 제어
+    # max_tokens=900,  # 요약 분량 제어
 )
 
 # - QA는 응답 다양성 약간 허용
 qa_llm = AzureChatOpenAI(
-    azure_deployment=os.getenv("AOAI_DEPLOY_GPT4O"),
-    openai_api_version="2024-02-01",
+    azure_deployment=os.getenv("AOAI_DEPLOY_GPT41"),
+    openai_api_version="2024-10-21",
     api_key=os.getenv("AOAI_API_KEY"),
     azure_endpoint=os.getenv("AOAI_ENDPOINT"),
     temperature=0.3,
-    max_tokens=700,  # QA 답변 길이 제어
+    # max_tokens=700,  # QA 답변 길이 제어
 )
 
 # 3) 요약 전용 System 프롬프트 (규칙 강력)
@@ -82,7 +84,7 @@ QA_SYSTEM = """\
 - 제공된 컨텍스트(논문 청크) **내에서만** 사실을 추출하여 답합니다.
 - 외부 지식 추정/환각 금지. 컨텍스트에 없으면 "원문에 명시 없음"이라고 답하세요.
 - 답변 형식:
-  1) 핵심 답변(3~5문장, 한국어)
+  1) 핵심 답변(5~10문장, 한국어)
   2) 근거 인용 블록: 각 문장 앞에 `> `를 붙여 2~4줄 인용
 """
 
@@ -192,7 +194,7 @@ def qa_with_retrieval(state):
 
     top_k = state.get("top_k", 4)
     try:
-        docs = retriever.get_relevant_documents(
+        docs = retriever.invoke(
             question
         )  # 필요 시 retriever.search_kwargs 조정
         docs = docs[:top_k] if len(docs) > top_k else docs

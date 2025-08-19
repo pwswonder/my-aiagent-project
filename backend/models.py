@@ -21,6 +21,7 @@ class Document(Base):
     file_path = Column(String)
     summary = Column(Text)
     domain = Column(String)
+    base_code = Column(Text, nullable=True)
     uploaded_at = Column(DateTime, default=datetime.utcnow)
     qa_histories = relationship("QAHistory", backref="document", cascade="all, delete")
 

@@ -1,0 +1,92 @@
+# Transformer Template
+"""
+Transformer Template
+"""
+import tensorflow as tf
+from tensorflow import keras
+from tensorflow.keras import layers
+
+class MultiHeadAttention(layers.Layer):
+    def __init__(self, d_model, num_heads):
+        super(MultiHeadAttention, self).__init__()
+        self.num_heads = num_heads
+        self.d_model = d_model
+        
+        assert d_model % self.num_heads == 0
+        
+        self.depth = d_model // self.num_heads
+        
+        self.wq = layers.Dense(d_model)
+        self.wk = layers.Dense(d_model)
+        self.wv = layers.Dense(d_model)
+        
+        self.dense = layers.Dense(d_model)
+        
+    def call(self, inputs):
+        query, key, value = inputs, inputs, inputs
+        batch_size = tf.shape(query)[0]
+        
+        query = self.wq(query)
+        key = self.wk(key)
+        value = self.wv(value)
+        
+        query = tf.reshape(query, (batch_size, -1, self.num_heads, self.depth))
+        key = tf.reshape(key, (batch_size, -1, self.num_heads, self.depth))
+        value = tf.reshape(value, (batch_size, -1, self.num_heads, self.depth))
+        
+        query = tf.transpose(query, perm=[0, 2, 1, 3])
+        key = tf.transpose(key, perm=[0, 2, 1, 3])
+        value = tf.transpose(value, perm=[0, 2, 1, 3])
+        
+        attention = tf.matmul(query, key, transpose_b=True)
+        attention = tf.nn.softmax(attention / tf.math.sqrt(tf.cast(self.depth, tf.float32)))
+        
+        output = tf.matmul(attention, value)
+        output = tf.transpose(output, perm=[0, 2, 1, 3])
+        output = tf.reshape(output, (batch_size, -1, self.d_model))
+        
+        return self.dense(output)
+
+def transformer_block(inputs, d_model, num_heads, dff, rate=0.1):
+    attn_output = MultiHeadAttention(d_model, num_heads)(inputs)
+    attn_output = layers.Dropout(rate)(attn_output)
+    out1 = layers.LayerNormalization()(inputs + attn_output)
+    
+    ffn_output = layers.Dense(dff, activation='relu')(out1)
+    ffn_output = layers.Dense(d_model)(ffn_output)
+    ffn_output = layers.Dropout(rate)(ffn_output)
+    out2 = layers.LayerNormalization()(out1 + ffn_output)
+    
+    return out2
+
+def create_transformer_model(
+    max_features={{ max_features | default(10000) }},
+    maxlen={{ maxlen | default(100) }},
+    d_model={{ d_model | default(128) }},
+    num_heads={{ num_heads | default(8) }},
+    dff={{ dff | default(512) }},
+    num_layers={{ num_layers | default(4) }},
+    num_classes={{ num_classes | default(2) }},
+    dropout_rate={{ dropout_rate | default(0.1) }}
+):
+    inputs = layers.Input(shape=(maxlen,))
+    
+    x = layers.Embedding(max_features, d_model)(inputs)
+    x = layers.Dropout(dropout_rate)(x)
+    
+    {% for _ in range(num_layers) %}
+    x = transformer_block(x, d_model, num_heads, dff, dropout_rate)
+    {% endfor %}
+    
+    x = layers.GlobalAveragePooling1D()(x)
+    x = layers.Dropout(dropout_rate)(x)
+    outputs = layers.Dense(num_classes, activation='softmax')(x)
+    
+    model = keras.Model(inputs, outputs)
+    model.compile(
+        optimizer='{{ optimizer | default("adam") }}',
+        loss='{{ loss | default("sparse_categorical_crossentropy") }}',
+        metrics=['accuracy']
+    )
+    
+    return model

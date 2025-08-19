@@ -1,0 +1,58 @@
+# ResNet (Residual Network) Template
+"""
+ResNet Template 
+"""
+import tensorflow as tf
+from tensorflow import keras
+from tensorflow.keras import layers
+
+def residual_block(x, filters, kernel_size=3, stride=1, conv_shortcut=False):
+    if conv_shortcut:
+        shortcut = layers.Conv2D(filters, 1, strides=stride)(x)
+        shortcut = layers.BatchNormalization()(shortcut)
+    else:
+        shortcut = x
+
+    x = layers.Conv2D(filters, kernel_size, strides=stride, padding='same')(x)
+    x = layers.BatchNormalization()(x)
+    x = layers.Activation('relu')(x)
+
+    x = layers.Conv2D(filters, kernel_size, padding='same')(x)
+    x = layers.BatchNormalization()(x)
+
+    x = layers.add([shortcut, x])
+    x = layers.Activation('relu')(x)
+    return x
+
+def create_resnet_model(
+    input_shape={{ input_shape | default([224, 224, 3]) }},
+    blocks_per_stage={{ blocks_per_stage | default([2, 2, 2, 2]) }},
+    filters_per_stage={{ filters_per_stage | default([64, 128, 256, 512]) }},
+    num_classes={{ num_classes | default(1000) }}
+):
+    inputs = layers.Input(shape=input_shape)
+    
+    x = layers.Conv2D(64, 7, strides=2, padding='same')(inputs)
+    x = layers.BatchNormalization()(x)
+    x = layers.Activation('relu')(x)
+    x = layers.MaxPooling2D(3, strides=2, padding='same')(x)
+    
+    {% for stage_idx in range(blocks_per_stage|length) %}
+    stride = 1 if {{ stage_idx }} == 0 else 2
+    x = residual_block(x, {{ filters_per_stage[stage_idx] }}, stride=stride, conv_shortcut=True)
+    {% for block_idx in range(1, blocks_per_stage[stage_idx]) %}
+    x = residual_block(x, {{ filters_per_stage[stage_idx] }})
+    {% endfor %}
+    {% endfor %}
+    
+    x = layers.GlobalAveragePooling2D()(x)
+    outputs = layers.Dense(num_classes, activation='softmax')(x)
+    
+    model = keras.Model(inputs, outputs)
+    model.compile(
+        optimizer='{{ optimizer | default("adam") }}',
+        loss='{{ loss | default("sparse_categorical_crossentropy") }}',
+        metrics=['accuracy']
+    )
+    
+    return model

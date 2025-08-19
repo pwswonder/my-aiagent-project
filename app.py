@@ -19,6 +19,7 @@ for key, default in {
     "selected_doc_id": None,
     "is_new_analysis": False,
     "qa_list": [],
+    "base_code": "",  # ✅ 추가
 }.items():
     if key not in st.session_state:
         st.session_state[key] = default
@@ -44,7 +45,7 @@ def render_qa_history(placeholder, qa_list):
 
 # ----------------- 🔹 사이드바 -------------------
 with st.sidebar:
-    st.markdown(f"👤 **사용자:** `{user_email}`")
+    st.markdown(f"👤 **사용자:** {user_email}")
     st.markdown("### 📁 문서 선택")
 
     try:
@@ -58,6 +59,14 @@ with st.sidebar:
     NEW_LABEL = "📤 새 논문 분석 시작"
     options = [NEW_LABEL] + [f"{d['filename']} (ID: {d['id']})" for d in doc_list]
 
+        # ✅ 옵션 변경 감지 → 위젯 상태 초기화
+    OPT_SNAPSHOT_KEY = "_doc_options_snapshot"
+    if st.session_state.get(OPT_SNAPSHOT_KEY) != options:
+        st.session_state.pop("doc_selectbox", None)  # 이전 선택값 제거
+        st.session_state[OPT_SNAPSHOT_KEY] = options
+
+
+
     def _current_index():
         sel_id = st.session_state.get("selected_doc_id")
         if sel_id is None:
@@ -66,10 +75,20 @@ with st.sidebar:
             if d["id"] == sel_id:
                 return i
         return 0
+    
 
-    selected = st.selectbox(
-        "문서를 선택하세요", options, index=_current_index(), key="doc_selectbox"
-    )
+        # ✅ 인덱스 범위 안전 가드
+    idx = _current_index()
+    if len(options) == 0:
+        options = [NEW_LABEL]
+    idx = max(0, min(idx, len(options) - 1))
+
+    # selected = st.selectbox(
+    #     "문서를 선택하세요", options, index=_current_index(), key="doc_selectbox"
+    # )
+    selected = st.selectbox("문서를 선택하세요", options, index=idx, key="doc_selectbox")
+
+
 
     prev_doc_id = st.session_state.get("selected_doc_id")
     prev_is_new = st.session_state.get("is_new_analysis", False)
@@ -78,6 +97,8 @@ with st.sidebar:
         st.session_state["selected_doc_id"] = None
         st.session_state["is_new_analysis"] = True
         st.session_state["qa_list"] = []
+        st.session_state["base_code"] = ""  # ✅ 리셋
+
         if prev_doc_id is not None or prev_is_new is False:
             st.rerun()
     else:
@@ -93,6 +114,8 @@ with st.sidebar:
                 st.session_state["selected_doc_id"] = None
                 st.session_state["is_new_analysis"] = True
                 st.session_state["qa_list"] = []
+                # st.session_state["base_code"] = ""         # ← 선택
+                st.session_state.pop("doc_selectbox", None)  # ← 위젯 리셋
                 st.rerun()
             except Exception as e:
                 st.error(f"❌ 삭제 실패: {e}")
@@ -101,6 +124,12 @@ with st.sidebar:
         if prev_doc_id != doc_id:
             st.session_state["selected_doc_id"] = doc_id
             st.session_state["is_new_analysis"] = False
+            st.session_state["base_code"] = (
+                ""  # ✅ 다른 문서로 갈 때 이전 코드 잔상 제거
+            )
+            st.session_state.pop("doc_selectbox", None) # ← 옵션/선택 재정렬 시 안전
+
+
             try:
                 r = requests.get(f"{FASTAPI_URL}/qa/{doc_id}")
                 r.raise_for_status()
@@ -133,10 +162,15 @@ if st.session_state["selected_doc_id"] is None and st.session_state["is_new_anal
                 response.raise_for_status()
                 result = response.json()
 
+                # ✅ base_code 세션에 저장
+                st.session_state["base_code"] = result.get("base_code", "")
+
                 # 🔁 업로드 성공 후 상태 갱신 & 상세 화면으로 전환
                 st.session_state["selected_doc_id"] = result["document_id"]
                 st.session_state["is_new_analysis"] = False
                 st.session_state["qa_list"] = []
+                # st.session_state["base_code"] = ""        # ← 남아있던 코드 제거(선택)
+                st.session_state.pop("doc_selectbox", None)  # ← 위젯 자체 리셋
                 st.success("✅ 문서 분석 완료!")
                 st.rerun()
 
@@ -152,10 +186,17 @@ elif st.session_state["selected_doc_id"] is not None:
 
         if doc_info:
             st.subheader("🧠 기술 도메인")
-            st.markdown(f"`{doc_info['domain']}`")
+            st.markdown(f"{doc_info['domain']}")
 
             st.subheader("📝 문서 요약")
             st.write(doc_info["summary"])
+
+            # ✅ 기본 코드 표시
+            if doc_info.get("base_code"):
+                st.subheader("💻 기본 코드")
+                st.code(doc_info["base_code"], language="python")
+            else:
+                st.info("기본 코드가 없습니다.")
 
             # ✅ 히스토리를 그릴 placeholder 생성
             if "qa_placeholder" not in st.session_state:

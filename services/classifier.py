@@ -10,8 +10,10 @@ load_dotenv()
 from langsmith import traceable
 
 llm = AzureChatOpenAI(
-    azure_deployment=os.getenv("AOAI_DEPLOY_GPT4O"),
-    openai_api_version="2024-02-01",
+    # azure_deployment=os.getenv("AOAI_DEPLOY_GPT4O"),
+    # openai_api_version="2024-02-01",
+    azure_deployment=os.getenv("AOAI_DEPLOY_GPT41"),
+    openai_api_version="2024-10-21",
     api_key=os.getenv("AOAI_API_KEY"),
     azure_endpoint=os.getenv("AOAI_ENDPOINT"),
     temperature=0.0,
