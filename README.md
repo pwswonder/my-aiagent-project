@@ -38,7 +38,7 @@ graph TB
     G --> H[Jinja2 렌더링]
     H --> I[슬롯 주입]
     I --> J[품질 분석]
-    J --> K[TensorFlow(keras) 코드]
+    J --> K[TensorFlow 코드]
     K --> L[파일 저장]
     
     C --> M[벡터 임베딩]
