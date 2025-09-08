@@ -32,9 +32,7 @@ def get_qa_history(document_id: int, db: Session = Depends(get_db)):
     # pydantic 모델 매핑을 신뢰해도 되고, 안전하게 dict로 변환해도 됩니다.
     return [
         schemas.QAHistoryOut(
-            question=row.question,
-            answer=row.answer,
-            created_at=row.created_at
+            question=row.question, answer=row.answer, created_at=row.created_at
         )
         for row in rows
     ]
@@ -68,27 +66,50 @@ def ask_existing_document_question(
     retriever = get_retriever(doc_id)
 
     # 3) 캐시 미스 → 복구
+    # 3) 캐시 미스 → 복구
     if retriever is None:
         file_path = document.file_path
         if not file_path or not os.path.exists(file_path):
-            raise HTTPException(status_code=404, detail="원본 파일을 찾을 수 없습니다. 재업로드가 필요합니다.")
+            raise HTTPException(
+                status_code=404,
+                detail="원본 파일을 찾을 수 없습니다. 재업로드가 필요합니다.",
+            )
 
-        # file_reader로 raw_text/meta 준비 → 그래프 실행(임베딩) → retriever 회수
+        # file_reader로 raw_text/meta 준비 → (변경) embedder 직접 호출 → retriever 회수
         fr_state = file_reader({"file": file_path})
-        result = _GRAPH.invoke(fr_state)
+
+        ## [RETRIEVER-REBUILD] avoid full graph; build retriever directly via embedder
+        result = None
+        try:
+            from services import embedder as _embedder
+
+            # embedder가 캐시에 저장하도록 document_id를 명시
+            emb_in = {**fr_state, "document_id": doc_id}
+            result = _embedder.embedder(emb_in)
+        except Exception as _e:
+            # Fallback: 기존 그래프 경로 유지
+            try:
+                result = _GRAPH.invoke(fr_state)
+            except Exception as _e2:
+                raise HTTPException(
+                    status_code=500, detail=f"retriever 복구 실패: {str(_e2)[:200]}"
+                )
+
         retriever = result.get("retriever")
         if retriever is None:
             raise HTTPException(status_code=500, detail="retriever 복구 실패")
 
-        # 메모리 캐시에 등록 (서버 재시작 시 사라짐)
+        # 메모리 캐시에 등록
         set_retriever(doc_id, retriever, result.get("vectorstore"))
 
     # 4) QA 수행 (빠르게: qa_agent만 호출)
-    qa_out = qa_agent.invoke({
-        "user_input": question,
-        "retriever": retriever,
-        "top_k": 5,
-    })
+    qa_out = qa_agent.invoke(
+        {
+            "user_input": question,
+            "retriever": retriever,
+            "top_k": 5,
+        }
+    )
     answer = qa_out.get("answer", "")
     if not answer:
         raise HTTPException(status_code=500, detail="답변 생성 실패")

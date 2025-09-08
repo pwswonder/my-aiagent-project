@@ -1,0 +1,11 @@
+template,found_blocks,recommended_blocks,missing_blocks,coverage_ratio
+services/templates/swin.j2,(none),"FIT_KWARGS, callbacks, compile_override, head, imports_extra","FIT_KWARGS, callbacks, compile_override, head, imports_extra",0.0
+services/templates/transformer.j2,"compile_override, imports_extra","FIT_KWARGS, callbacks, compile_override, decoder_layers, head, imports_extra, model_body_extra","FIT_KWARGS, callbacks, decoder_layers, head, model_body_extra",0.29
+services/templates/transformer_mt.j2,"compile_override, decoder_layers, imports_extra","FIT_KWARGS, callbacks, compile_override, decoder_layers, head, imports_extra, model_body_extra","FIT_KWARGS, callbacks, head, model_body_extra",0.43
+services/templates/resnet.j2,"compile_override, head, imports_extra, stages","FIT_KWARGS, callbacks, compile_override, head, imports_extra, model_body_extra, stages","FIT_KWARGS, callbacks, model_body_extra",0.57
+services/templates/rnn_seq.j2,"attention_mech, compile_override, head, imports_extra, rnn_stack, schedule","FIT_KWARGS, callbacks, compile_override, head, imports_extra, model_body_extra, rnn_stack","FIT_KWARGS, callbacks, model_body_extra",0.86
+services/templates/cnn_family.j2,"compile_override, head, imports_extra, inception_mixed, se_squeeze_excitation, stages, stochastic_depth","FIT_KWARGS, callbacks, compile_override, head, imports_extra, model_body_extra, stages","FIT_KWARGS, callbacks, model_body_extra",1.0
+services/templates/gan.j2,"compile_override, discriminator_block, gan_loss, generator_blocks, imports_extra","FIT_KWARGS, callbacks, compile_override, head, imports_extra","FIT_KWARGS, callbacks, head",1.0
+services/templates/unet.j2,"compile_override, decoder_blocks, encoder_blocks, head, imports_extra","FIT_KWARGS, callbacks, compile_override, head, imports_extra","FIT_KWARGS, callbacks",1.0
+services/templates/autoencoder.j2,"compile_override, decoder, encoder, head, imports_extra, regularizer","FIT_KWARGS, callbacks, compile_override, head, imports_extra","FIT_KWARGS, callbacks",1.2
+services/templates/vae.j2,"compile_override, decoder, encoder, head, imports_extra, kl_anneal, latent","FIT_KWARGS, callbacks, compile_override, head, imports_extra","FIT_KWARGS, callbacks",1.4

@@ -60,6 +60,7 @@ SUMMARY_SYSTEM = """\
 
 [스타일/길이]
 - 한국어로 작성합니다.
+- 각 섹션 제목은 반드시 Markdown 헤더(###)로 표기하고, 본문은 일반 문단/불릿으로 작성합니다.
 - 전체 분량은 300~500단어 내로 유지합니다.
 - 불필요한 수식/장식 금지. 핵심만 간결하게.
 """
@@ -131,6 +132,7 @@ def _dedup_lines(text: str) -> str:
             out.append(line)
     return "\n".join(out)
 
+
 @traceable  # ★ 이 1줄만 추가
 # 9) Runnable: 요약 에이전트
 def _run_summarize(state):
@@ -194,9 +196,7 @@ def qa_with_retrieval(state):
 
     top_k = state.get("top_k", 4)
     try:
-        docs = retriever.invoke(
-            question
-        )  # 필요 시 retriever.search_kwargs 조정
+        docs = retriever.invoke(question)  # 필요 시 retriever.search_kwargs 조정
         docs = docs[:top_k] if len(docs) > top_k else docs
     except Exception as e:
         return {"answer": f"검색 중 오류가 발생했습니다: {e}"}

@@ -1,0 +1,311 @@
+{
+  "CNN": {
+    "slots": [
+      {
+        "name": "regularizer",
+        "contract": {
+          "inputs": [],
+          "provides": [],
+          "forbidden": []
+        },
+        "example_code": "# TODO: provide code for slot regularizer\n"
+      },
+      {
+        "name": "imports_extra",
+        "contract": {
+          "inputs": [],
+          "provides": [],
+          "forbidden": []
+        },
+        "example_code": "import math\n"
+      },
+      {
+        "name": "encoder",
+        "contract": {
+          "inputs": [],
+          "provides": [],
+          "forbidden": []
+        },
+        "example_code": "# TODO: provide code for slot encoder\n"
+      },
+      {
+        "name": "decoder",
+        "contract": {
+          "inputs": [],
+          "provides": [],
+          "forbidden": []
+        },
+        "example_code": "# TODO: provide code for slot decoder\n"
+      },
+      {
+        "name": "head",
+        "contract": {
+          "inputs": [],
+          "provides": [],
+          "forbidden": []
+        },
+        "example_code": "# TODO: provide code for slot head\n"
+      },
+      {
+        "name": "compile_override",
+        "contract": {
+          "inputs": [],
+          "provides": [],
+          "forbidden": []
+        },
+        "example_code": "# TODO: provide code for slot compile_override\n"
+      },
+      {
+        "name": "callbacks",
+        "contract": {
+          "inputs": [],
+          "provides": [],
+          "forbidden": []
+        },
+        "example_code": "# TODO: provide code for slot callbacks\n"
+      },
+      {
+        "name": "se_squeeze_excitation",
+        "contract": {
+          "inputs": [],
+          "provides": [],
+          "forbidden": []
+        },
+        "example_code": "se = layers.GlobalAveragePooling2D()(x)\nse = layers.Dense(int(x.shape[-1]*{se_ratio}), activation='relu')(se)\nse = layers.Dense(int(x.shape[-1]), activation='sigmoid')(se)\nse = layers.Reshape((1,1,int(x.shape[-1])))(se)\nx = layers.Multiply()([x, se])\n"
+      },
+      {
+        "name": "stochastic_depth",
+        "contract": {
+          "inputs": [],
+          "provides": [],
+          "forbidden": []
+        },
+        "example_code": "if {drop_rate} > 0:\n    import tensorflow as tf\n    keep = 1.0 - {drop_rate}\n    shape = (tf.shape(x)[0],) + (1,)* (len(x.shape)-1)\n    rnd = tf.random.uniform(shape, dtype=x.dtype)\n    mask = tf.floor(rnd + keep) / keep\n    x = x * mask\nx = layers.Add()([x, shortcut])\n"
+      },
+      {
+        "name": "inception_mixed",
+        "contract": {
+          "inputs": [],
+          "provides": [],
+          "forbidden": []
+        },
+        "example_code": "b1 = layers.Conv2D({filters}, 1, padding='same', activation='relu')(x)\nb2 = layers.Conv2D({filters}, 1, padding='same', activation='relu')(x)\nb2 = layers.Conv2D({filters}, 3, padding='same', activation='relu')(b2)\nb3 = layers.Conv2D({filters}, 1, padding='same', activation='relu')(x)\nb3 = layers.Conv2D({filters}, 5, padding='same', activation='relu')(b3)\nb4 = layers.MaxPool2D(3, strides=1, padding='same')(x)\nb4 = layers.Conv2D({filters}, 1, padding='same', activation='relu')(b4)\nx = layers.Concatenate()([b1,b2,b3,b4])\n"
+      },
+      {
+        "name": "stages",
+        "contract": {
+          "inputs": [],
+          "provides": [],
+          "forbidden": []
+        },
+        "example_code": "for si, (filters, blocks) in enumerate(zip({filters_list}, {blocks_per_stage})):\n    for bi in range(blocks):\n        sc = x\n        x = layers.Conv2D(filters, 3, padding='same', use_bias=False, name=f's{si}_b{bi}_conv1')(x)\n        x = layers.BatchNormalization(name=f's{si}_b{bi}_bn1')(x)\n        x = layers.ReLU(name=f's{si}_b{bi}_relu1')(x)\n        x = layers.Conv2D(filters, 3, padding='same', use_bias=False, name=f's{si}_b{bi}_conv2')(x)\n        x = layers.BatchNormalization(name=f's{si}_b{bi}_bn2')(x)\n        x = layers.Add(name=f's{si}_b{bi}_add')([x, sc])\n        x = layers.ReLU(name=f's{si}_b{bi}_out')(x)\n"
+      },
+      {
+        "name": "model_body_extra",
+        "contract": {
+          "inputs": [],
+          "provides": [],
+          "forbidden": []
+        },
+        "example_code": "# TODO: provide code for slot model_body_extra\n"
+      },
+      {
+        "name": "gan_loss",
+        "contract": {
+          "inputs": [],
+          "provides": [],
+          "forbidden": []
+        },
+        "example_code": "# TODO: provide code for slot gan_loss\n"
+      },
+      {
+        "name": "discriminator_block",
+        "contract": {
+          "inputs": [],
+          "provides": [],
+          "forbidden": []
+        },
+        "example_code": "# TODO: provide code for slot discriminator_block\n"
+      },
+      {
+        "name": "generator_blocks",
+        "contract": {
+          "inputs": [],
+          "provides": [],
+          "forbidden": []
+        },
+        "example_code": "# TODO: provide code for slot generator_blocks\n"
+      },
+      {
+        "name": "encoder_blocks",
+        "contract": {
+          "inputs": [],
+          "provides": [],
+          "forbidden": []
+        },
+        "example_code": "# TODO: provide code for slot encoder_blocks\n"
+      },
+      {
+        "name": "decoder_blocks",
+        "contract": {
+          "inputs": [],
+          "provides": [],
+          "forbidden": []
+        },
+        "example_code": "# TODO: provide code for slot decoder_blocks\n"
+      },
+      {
+        "name": "kl_anneal",
+        "contract": {
+          "inputs": [],
+          "provides": [],
+          "forbidden": []
+        },
+        "example_code": "# TODO: provide code for slot kl_anneal\n"
+      },
+      {
+        "name": "latent",
+        "contract": {
+          "inputs": [],
+          "provides": [],
+          "forbidden": []
+        },
+        "example_code": "# TODO: provide code for slot latent\n"
+      }
+    ]
+  },
+  "RNN": {
+    "slots": [
+      {
+        "name": "attention_mech",
+        "contract": {
+          "inputs": [],
+          "provides": [],
+          "forbidden": []
+        },
+        "example_code": "# TODO: provide code for slot attention_mech\n"
+      },
+      {
+        "name": "schedule",
+        "contract": {
+          "inputs": [],
+          "provides": [],
+          "forbidden": []
+        },
+        "example_code": "# TODO: provide code for slot schedule\n"
+      },
+      {
+        "name": "imports_extra",
+        "contract": {
+          "inputs": [],
+          "provides": [],
+          "forbidden": []
+        },
+        "example_code": "# TODO: provide code for slot imports_extra\n"
+      },
+      {
+        "name": "rnn_stack",
+        "contract": {
+          "inputs": [],
+          "provides": [],
+          "forbidden": []
+        },
+        "example_code": "# TODO: provide code for slot rnn_stack\n"
+      },
+      {
+        "name": "head",
+        "contract": {
+          "inputs": [],
+          "provides": [],
+          "forbidden": []
+        },
+        "example_code": "# TODO: provide code for slot head\n"
+      },
+      {
+        "name": "compile_override",
+        "contract": {
+          "inputs": [],
+          "provides": [],
+          "forbidden": []
+        },
+        "example_code": "# TODO: provide code for slot compile_override\n"
+      },
+      {
+        "name": "callbacks",
+        "contract": {
+          "inputs": [],
+          "provides": [],
+          "forbidden": []
+        },
+        "example_code": "# TODO: provide code for slot callbacks\n"
+      },
+      {
+        "name": "model_body_extra",
+        "contract": {
+          "inputs": [],
+          "provides": [],
+          "forbidden": []
+        },
+        "example_code": "# TODO: provide code for slot model_body_extra\n"
+      }
+    ]
+  },
+  "Transformer": {
+    "slots": [
+      {
+        "name": "imports_extra",
+        "contract": {
+          "inputs": [],
+          "provides": [],
+          "forbidden": []
+        },
+        "example_code": "# TODO: provide code for slot imports_extra\n"
+      },
+      {
+        "name": "compile_override",
+        "contract": {
+          "inputs": [],
+          "provides": [],
+          "forbidden": []
+        },
+        "example_code": "# TODO: provide code for slot compile_override\n"
+      },
+      {
+        "name": "callbacks",
+        "contract": {
+          "inputs": [],
+          "provides": [],
+          "forbidden": []
+        },
+        "example_code": "# TODO: provide code for slot callbacks\n"
+      },
+      {
+        "name": "decoder_layers",
+        "contract": {
+          "inputs": [],
+          "provides": [],
+          "forbidden": []
+        },
+        "example_code": "# TODO: provide code for slot decoder_layers\n"
+      },
+      {
+        "name": "head",
+        "contract": {
+          "inputs": [],
+          "provides": [],
+          "forbidden": []
+        },
+        "example_code": "# TODO: provide code for slot head\n"
+      },
+      {
+        "name": "model_body_extra",
+        "contract": {
+          "inputs": [],
+          "provides": [],
+          "forbidden": []
+        },
+        "example_code": "# TODO: provide code for slot model_body_extra\n"
+      }
+    ]
+  }
+}

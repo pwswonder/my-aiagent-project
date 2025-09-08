@@ -1,0 +1,390 @@
+{
+  "autoencoder": {
+    "family": "CNN",
+    "anchors": {
+      "STEM_BLOCK": {
+        "line": 63,
+        "hint": "before first Conv2D("
+      },
+      "RESIDUAL_STAGE_1": {
+        "line": -1,
+        "hint": "near stage-1"
+      },
+      "RESIDUAL_STAGE_2": {
+        "line": -1,
+        "hint": "near stage-2"
+      },
+      "RESIDUAL_STAGE_3": {
+        "line": -1,
+        "hint": "near stage-3"
+      },
+      "CLASSIFIER_HEAD": {
+        "line": 56,
+        "hint": "before last Dense("
+      },
+      "FIT_KWARGS": {
+        "line": -1,
+        "hint": "inside model.fit(...)"
+      }
+    },
+    "found_blocks": [
+      "regularizer",
+      "imports_extra",
+      "encoder",
+      "decoder",
+      "head",
+      "compile_override",
+      "FIT_KWARGS",
+      "callbacks"
+    ]
+  },
+  "cnn_family": {
+    "family": "CNN",
+    "anchors": {
+      "STEM_BLOCK": {
+        "line": 44,
+        "hint": "before first Conv2D("
+      },
+      "RESIDUAL_STAGE_1": {
+        "line": -1,
+        "hint": "near stage-1"
+      },
+      "RESIDUAL_STAGE_2": {
+        "line": -1,
+        "hint": "near stage-2"
+      },
+      "RESIDUAL_STAGE_3": {
+        "line": -1,
+        "hint": "near stage-3"
+      },
+      "CLASSIFIER_HEAD": {
+        "line": 181,
+        "hint": "before last Dense("
+      },
+      "FIT_KWARGS": {
+        "line": -1,
+        "hint": "inside model.fit(...)"
+      }
+    },
+    "found_blocks": [
+      "se_squeeze_excitation",
+      "stochastic_depth",
+      "inception_mixed",
+      "imports_extra",
+      "stages",
+      "head",
+      "compile_override",
+      "FIT_KWARGS",
+      "callbacks",
+      "model_body_extra"
+    ]
+  },
+  "gan": {
+    "family": "CNN",
+    "anchors": {
+      "STEM_BLOCK": {
+        "line": 51,
+        "hint": "before first Conv2D("
+      },
+      "RESIDUAL_STAGE_1": {
+        "line": -1,
+        "hint": "near stage-1"
+      },
+      "RESIDUAL_STAGE_2": {
+        "line": -1,
+        "hint": "near stage-2"
+      },
+      "RESIDUAL_STAGE_3": {
+        "line": -1,
+        "hint": "near stage-3"
+      },
+      "CLASSIFIER_HEAD": {
+        "line": 68,
+        "hint": "before last Dense("
+      },
+      "FIT_KWARGS": {
+        "line": -1,
+        "hint": "inside model.fit(...)"
+      }
+    },
+    "found_blocks": [
+      "gan_loss",
+      "discriminator_block",
+      "imports_extra",
+      "generator_blocks",
+      "compile_override",
+      "FIT_KWARGS",
+      "callbacks",
+      "head"
+    ]
+  },
+  "resnet": {
+    "family": "CNN",
+    "anchors": {
+      "STEM_BLOCK": {
+        "line": 69,
+        "hint": "before first Conv2D("
+      },
+      "RESIDUAL_STAGE_1": {
+        "line": -1,
+        "hint": "near stage-1"
+      },
+      "RESIDUAL_STAGE_2": {
+        "line": -1,
+        "hint": "near stage-2"
+      },
+      "RESIDUAL_STAGE_3": {
+        "line": -1,
+        "hint": "near stage-3"
+      },
+      "CLASSIFIER_HEAD": {
+        "line": 208,
+        "hint": "before last Dense("
+      },
+      "FIT_KWARGS": {
+        "line": -1,
+        "hint": "inside model.fit(...)"
+      }
+    },
+    "found_blocks": [
+      "imports_extra",
+      "stages",
+      "head",
+      "compile_override",
+      "FIT_KWARGS",
+      "callbacks",
+      "model_body_extra"
+    ]
+  },
+  "rnn_seq": {
+    "family": "RNN",
+    "anchors": {
+      "EMBEDDING_BLOCK": {
+        "line": -1,
+        "hint": "before first Embedding("
+      },
+      "ENCODER_BLOCK": {
+        "line": 78,
+        "hint": "before first LSTM("
+      },
+      "DECODER_BLOCK": {
+        "line": 79,
+        "hint": "after last LSTM("
+      },
+      "ATTN_BLOCK": {
+        "line": 13,
+        "hint": "near attention helper/section"
+      },
+      "HEAD_BLOCK": {
+        "line": 119,
+        "hint": "before last Dense("
+      },
+      "FIT_KWARGS": {
+        "line": -1,
+        "hint": "inside model.fit(...)"
+      }
+    },
+    "found_blocks": [
+      "attention_mech",
+      "schedule",
+      "imports_extra",
+      "rnn_stack",
+      "head",
+      "compile_override",
+      "FIT_KWARGS",
+      "callbacks",
+      "model_body_extra"
+    ]
+  },
+  "swin": {
+    "family": "CNN",
+    "anchors": {
+      "STEM_BLOCK": {
+        "line": 9,
+        "hint": "before first Conv2D("
+      },
+      "RESIDUAL_STAGE_1": {
+        "line": -1,
+        "hint": "near stage-1"
+      },
+      "RESIDUAL_STAGE_2": {
+        "line": -1,
+        "hint": "near stage-2"
+      },
+      "RESIDUAL_STAGE_3": {
+        "line": -1,
+        "hint": "near stage-3"
+      },
+      "CLASSIFIER_HEAD": {
+        "line": 13,
+        "hint": "before last Dense("
+      },
+      "FIT_KWARGS": {
+        "line": -1,
+        "hint": "inside model.fit(...)"
+      }
+    },
+    "found_blocks": [
+      "FIT_KWARGS",
+      "callbacks",
+      "compile_override",
+      "head",
+      "imports_extra",
+      "stages"
+    ]
+  },
+  "transformer": {
+    "family": "Transformer",
+    "anchors": {
+      "MODEL_IMPORTS": {
+        "line": 9,
+        "hint": "after last import"
+      },
+      "EMBEDDING_BLOCK": {
+        "line": 62,
+        "hint": "before first Embedding("
+      },
+      "ENCODER_STACK_BLOCK": {
+        "line": 89,
+        "hint": "before first MultiHeadAttention("
+      },
+      "DECODER_STACK_BLOCK": {
+        "line": 90,
+        "hint": "after last MultiHeadAttention("
+      },
+      "HEAD_BLOCK": {
+        "line": 126,
+        "hint": "before last Dense("
+      },
+      "FIT_KWARGS": {
+        "line": -1,
+        "hint": "inside model.fit(...)"
+      }
+    },
+    "found_blocks": [
+      "imports_extra",
+      "compile_override",
+      "FIT_KWARGS",
+      "callbacks",
+      "decoder_layers",
+      "head",
+      "model_body_extra"
+    ]
+  },
+  "transformer_mt": {
+    "family": "Transformer",
+    "anchors": {
+      "MODEL_IMPORTS": {
+        "line": 9,
+        "hint": "after last import"
+      },
+      "EMBEDDING_BLOCK": {
+        "line": 64,
+        "hint": "before first Embedding("
+      },
+      "ENCODER_STACK_BLOCK": {
+        "line": 92,
+        "hint": "before first MultiHeadAttention("
+      },
+      "DECODER_STACK_BLOCK": {
+        "line": 113,
+        "hint": "after last MultiHeadAttention("
+      },
+      "HEAD_BLOCK": {
+        "line": 156,
+        "hint": "before last Dense("
+      },
+      "FIT_KWARGS": {
+        "line": -1,
+        "hint": "inside model.fit(...)"
+      }
+    },
+    "found_blocks": [
+      "imports_extra",
+      "decoder_layers",
+      "compile_override",
+      "FIT_KWARGS",
+      "callbacks",
+      "head",
+      "model_body_extra"
+    ]
+  },
+  "unet": {
+    "family": "CNN",
+    "anchors": {
+      "STEM_BLOCK": {
+        "line": 32,
+        "hint": "before first Conv2D("
+      },
+      "RESIDUAL_STAGE_1": {
+        "line": -1,
+        "hint": "near stage-1"
+      },
+      "RESIDUAL_STAGE_2": {
+        "line": -1,
+        "hint": "near stage-2"
+      },
+      "RESIDUAL_STAGE_3": {
+        "line": -1,
+        "hint": "near stage-3"
+      },
+      "CLASSIFIER_HEAD": {
+        "line": -1,
+        "hint": "before last Dense("
+      },
+      "FIT_KWARGS": {
+        "line": -1,
+        "hint": "inside model.fit(...)"
+      }
+    },
+    "found_blocks": [
+      "imports_extra",
+      "encoder_blocks",
+      "decoder_blocks",
+      "head",
+      "compile_override",
+      "FIT_KWARGS",
+      "callbacks"
+    ]
+  },
+  "vae": {
+    "family": "CNN",
+    "anchors": {
+      "STEM_BLOCK": {
+        "line": 64,
+        "hint": "before first Conv2D("
+      },
+      "RESIDUAL_STAGE_1": {
+        "line": -1,
+        "hint": "near stage-1"
+      },
+      "RESIDUAL_STAGE_2": {
+        "line": -1,
+        "hint": "near stage-2"
+      },
+      "RESIDUAL_STAGE_3": {
+        "line": -1,
+        "hint": "near stage-3"
+      },
+      "CLASSIFIER_HEAD": {
+        "line": 57,
+        "hint": "before last Dense("
+      },
+      "FIT_KWARGS": {
+        "line": -1,
+        "hint": "inside model.fit(...)"
+      }
+    },
+    "found_blocks": [
+      "kl_anneal",
+      "imports_extra",
+      "encoder",
+      "latent",
+      "decoder",
+      "head",
+      "compile_override",
+      "FIT_KWARGS",
+      "callbacks"
+    ]
+  }
+}

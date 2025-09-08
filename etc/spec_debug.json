@@ -1,0 +1,84 @@
+{
+"spec":{
+"title":"Investigation on deep learning-based galaxy image translation models"
+"task_type":"other"
+"data_modality":"image"
+"proposed_model_family":"Other"
+"subtype":NULL
+"key_blocks":[]
+"dims":{
+"in_dim":NULL
+"out_dim":NULL
+"seq_len":NULL
+"pred_len":NULL
+"hidden_dim":NULL
+"num_layers":NULL
+"num_heads":NULL
+"ffn_dim":NULL
+"dropout":NULL
+"height":NULL
+"width":NULL
+"kernel_size":NULL
+"dilation":NULL
+"vocab_size":NULL
+"max_len":NULL
+"encoder_layers":NULL
+"decoder_layers":NULL
+"stages":NULL
+"vgg":NULL
+"densenet":NULL
+"swin":NULL
+}
+"objective":NULL
+"positional_encoding":NULL
+"baselines":[
+0:{
+"name":"Swin Transformer"
+"family":"Transformer"
+"notes":"Transformer with shifted windows, used for image translation."
+}
+1:{
+"name":"SRGAN"
+"family":"GAN"
+"notes":"Super-resolution GAN for image translation."
+}
+2:{
+"name":"Capsule network"
+"family":"Other"
+"notes":"Capsule-based encoder-decoder for image translation."
+}
+3:{
+"name":"Diffusion model"
+"family":"Other"
+"notes":"Conditional DDIM-based diffusion model for image translation."
+}
+]
+"evidence":[
+0:{
+"text":"We tested four representative models, i.e. a transformer with shifted windows (Swin Transformer), a super-resolution generative adversarial network (SRGAN), a capsule network, and a diffusion model, performing intra-domain and inter-domain translations using galaxy images"
+"section":"Abstract"
+"page":1
+}
+1:{
+"text":"In this work, we performed the intra-domain S2S translation and the inter-domain S2C translation with four representative generative models, a transformer with shifted windows (Swin Transformer; Liu et al. 2021; Liang et al. 2021), a super-resolution generative adversarial network (SRGAN; Ledig et al. 2017), a capsule network (Sabour et al. 2017; Dey et al. 2022), and a diffusion model (Ho et al. 2020; Song et al. 2021; Saharia et al. 2022)."
+"section":"Methods"
+"page":3
+}
+2:{
+"text":"The Swin Transformer and the SRGAN were used for both the S2S and S2C translations. The capsule network was used for the S2S translation. The diffusion model was used for the S2C translation."
+"section":"Methods"
+"page":3
+}
+]
+"confidence":0.3
+"is_proposed_clearly_identified":true
+"custom_blocks":NULL
+}
+"warnings":[
+0:{
+"code":"PROPOSED_MARKED_CLEAR"
+"message":"family/dims/blocks/evidence 단서를 근거로 제안 모델을 명시적으로 표시했습니다."
+"fix_applied":true
+}
+]
+}

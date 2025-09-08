@@ -1,0 +1,150 @@
+{
+  "autoencoder.j2": {
+    "family": "CNN",
+    "found": [
+      "regularizer",
+      "imports_extra",
+      "encoder",
+      "decoder",
+      "head",
+      "compile_override",
+      "FIT_KWARGS",
+      "callbacks"
+    ],
+    "missing": [],
+    "ok": true
+  },
+  "cnn_family.j2": {
+    "family": "CNN",
+    "found": [
+      "se_squeeze_excitation",
+      "stochastic_depth",
+      "inception_mixed",
+      "imports_extra",
+      "stages",
+      "head",
+      "compile_override",
+      "FIT_KWARGS",
+      "callbacks",
+      "model_body_extra"
+    ],
+    "missing": [],
+    "ok": true
+  },
+  "gan.j2": {
+    "family": "CNN",
+    "found": [
+      "gan_loss",
+      "discriminator_block",
+      "imports_extra",
+      "generator_blocks",
+      "compile_override",
+      "FIT_KWARGS",
+      "callbacks",
+      "head"
+    ],
+    "missing": [],
+    "ok": true
+  },
+  "resnet.j2": {
+    "family": "CNN",
+    "found": [
+      "imports_extra",
+      "stages",
+      "head",
+      "compile_override",
+      "FIT_KWARGS",
+      "callbacks",
+      "model_body_extra"
+    ],
+    "missing": [],
+    "ok": true
+  },
+  "rnn_seq.j2": {
+    "family": "RNN",
+    "found": [
+      "attention_mech",
+      "schedule",
+      "imports_extra",
+      "rnn_stack",
+      "head",
+      "compile_override",
+      "FIT_KWARGS",
+      "callbacks",
+      "model_body_extra"
+    ],
+    "missing": [],
+    "ok": true
+  },
+  "swin.j2": {
+    "family": "CNN",
+    "found": [
+      "FIT_KWARGS",
+      "callbacks",
+      "compile_override",
+      "head",
+      "imports_extra",
+      "stages"
+    ],
+    "missing": [],
+    "ok": true
+  },
+  "transformer.j2": {
+    "family": "Transformer",
+    "found": [
+      "imports_extra",
+      "compile_override",
+      "FIT_KWARGS",
+      "callbacks",
+      "decoder_layers",
+      "head",
+      "model_body_extra"
+    ],
+    "missing": [],
+    "ok": true
+  },
+  "transformer_mt.j2": {
+    "family": "Transformer",
+    "found": [
+      "imports_extra",
+      "decoder_layers",
+      "compile_override",
+      "FIT_KWARGS",
+      "callbacks",
+      "head",
+      "model_body_extra"
+    ],
+    "missing": [],
+    "ok": true
+  },
+  "unet.j2": {
+    "family": "CNN",
+    "found": [
+      "imports_extra",
+      "encoder_blocks",
+      "decoder_blocks",
+      "head",
+      "compile_override",
+      "FIT_KWARGS",
+      "callbacks"
+    ],
+    "missing": [],
+    "ok": true
+  },
+  "vae.j2": {
+    "family": "CNN",
+    "found": [
+      "kl_anneal",
+      "imports_extra",
+      "encoder",
+      "latent",
+      "decoder",
+      "head",
+      "compile_override",
+      "FIT_KWARGS",
+      "callbacks"
+    ],
+    "missing": [],
+    "ok": true
+  }
+}

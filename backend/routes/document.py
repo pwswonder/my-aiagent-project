@@ -13,7 +13,10 @@ from services.retriever_cache import set_retriever  # retriever 캐시 등록
 
 import os
 import shutil
+import json  # [ADDED]
 from datetime import datetime, timezone, timedelta
+from services.basecode_service import PERSIST_DIR  # [ADDED]
+
 
 router = APIRouter()
 UPLOAD_DIR = "uploaded_docs"
@@ -21,6 +24,48 @@ os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 # 그래프는 서버 구동 시 1회 컴파일 → 매 요청마다 재컴파일 비용 절약
 _GRAPH = build_graph()
+
+
+@router.get("/documents/{doc_id}/basecode")  # [ADDED]
+def get_basecode(doc_id: int):  # [MODIFIED] str -> int (정수 ID 사용)
+    """
+    문서별로 영속화된 base code 메타/소스를 반환.
+    """
+    try:  # [ADDED]
+        doc_dir = os.path.join(PERSIST_DIR, f"doc_{doc_id}")
+        meta_path = os.path.join(doc_dir, "basecode_meta.json")
+        if not os.path.isdir(doc_dir) or not os.path.isfile(meta_path):
+            return {"exists": False}
+
+        with open(meta_path, "r", encoding="utf-8") as f:
+            meta = json.load(f)
+
+        py_path = meta.get("py_path")
+        sum_path = meta.get("summary_path")
+
+        source = None
+        summary = None
+
+        if py_path and os.path.isfile(py_path):
+            with open(py_path, "r", encoding="utf-8") as f:
+                source = f.read()
+
+        if sum_path and os.path.isfile(sum_path):
+            with open(sum_path, "r", encoding="utf-8") as f:
+                summary = f.read()
+
+        # [MODIFIED] 실제 내용 유무로 exists 판단
+        exists = bool((source and source.strip()) or (summary and summary.strip()))
+
+        return {
+            "exists": exists,
+            "model_key": meta.get("model_key"),
+            "py_path": py_path,
+            "source": source,
+            "summary": summary,
+        }
+    except Exception as e:  # [ADDED]
+        raise HTTPException(status_code=500, detail=f"{e}")
 
 
 @router.post("/documents/upload")
@@ -38,7 +83,7 @@ async def upload_document(
     5) retriever 캐시에 보관
     6) qa_agent로 질문 답변 생성
     7) QA 히스토리 저장
-    8) ✅ used_model/base_code 응답 포함 (DB 저장 X, 표시용)
+    8) ✅ used_model/base_code 및 신규 아티팩트 응답 포함 (DB 저장 X, 표시용)
     """
     # 사용자 하드코딩 (id=1) — 운영에서는 인증 연동
     user = db.query(models.User).filter_by(id=1).first()
@@ -66,6 +111,13 @@ async def upload_document(
             # ✅ 기존 문서의 경우엔 모델/코드가 저장되어 있지 않으므로 None
             "used_model": None,
             "base_code": None,
+            # [ADDED] 신규 아티팩트 키도 스키마 정합을 위해 명시(값은 없음)
+            "basecode_py_path": None,
+            "basecode_source": None,
+            "basecode_summary": None,
+            "spec": None,
+            "spec_warnings": None,
+            "basecode_error": None,
         }
 
     # 1) 파일 저장
@@ -91,13 +143,23 @@ async def upload_document(
     used_model = result.get("used_model")  # ✅ 추가
     base_code = result.get("base_code")  # ✅ 추가
 
-    # 4) Document 저장 (DB 스키마는 그대로: used_model/base_code는 저장하지 않음)
+    # [ADDED] 템플릿 codegen 신규 아티팩트들 (있으면 응답에 포함)
+    basecode_py_path = result.get("basecode_py_path")
+    basecode_source = result.get("basecode_source")
+    basecode_summary = result.get("basecode_summary")
+    spec = result.get("spec")
+    spec_warnings = result.get("spec_warnings")
+    basecode_error = result.get("basecode_error")
+
+    # 4) Document 저장 (DB 스키마는 그대로: used_model/base_code 외 신규 아티팩트는 저장하지 않음)
     document = models.Document(
         user_id=user.id,
         filename=file.filename,
         file_path=file_path,
         summary=summary,
         domain=domain,
+        # [ADDED] base_code를 DB에 보존하고 싶다면 모델에 컬럼이 있어야 함(없으면 주석 유지)
+        base_code=(basecode_source or base_code or None),  # [ADDED]
         uploaded_at=datetime.utcnow(),  # 필요 시 timezone-aware로 개선 가능
     )
     db.add(document)
@@ -132,7 +194,7 @@ async def upload_document(
     db.add(qa_entry)
     db.commit()
 
-    # 8) 최종 응답 (✅ used_model/base_code 포함)
+    # 8) 최종 응답 (✅ used_model/base_code + 신규 아티팩트 포함)
     return JSONResponse(
         content={
             "filename": file.filename,
@@ -142,6 +204,13 @@ async def upload_document(
             "document_id": document.id,
             "used_model": used_model,  # ✅
             "base_code": base_code,  # ✅
+            # [ADDED] 신규 아티팩트
+            "basecode_py_path": basecode_py_path,
+            "basecode_source": basecode_source,
+            "basecode_summary": basecode_summary,
+            "spec": spec,
+            "spec_warnings": spec_warnings,
+            "basecode_error": basecode_error,
         }
     )
 
@@ -159,8 +228,15 @@ def get_documents(db: Session = Depends(get_db)):
             "domain": doc.domain,
             "summary": doc.summary,
             "uploaded_at": doc.uploaded_at,
-            "base_code": doc.base_code,   # ✅ 추가
-
+            # [ADDED] 레거시 코드 표시 호환 (모델에 컬럼이 없는 경우 None)
+            "base_code": getattr(doc, "base_code", None),
+            # [ADDED] 신규 아티팩트는 DB에 보존하지 않았다면 리스트 응답에선 None으로 내려 호환 유지
+            "basecode_py_path": None,
+            "basecode_source": None,
+            "basecode_summary": None,
+            "spec": None,
+            "spec_warnings": None,
+            "basecode_error": None,
         }
         for doc in documents
     ]
@@ -200,7 +276,7 @@ async def analyze_document_only(
     3) 그래프 실행(임베딩→요약→분류→모델추출→base code)
     4) Document 저장
     5) retriever 캐시에 등록
-    6) ✅ used_model/base_code 응답 포함 (DB 저장 X, 표시용)
+    6) ✅ used_model/base_code 및 신규 아티팩트 응답 포함 (DB 저장 X, 표시용)
     """
     # 사용자 하드코딩 (id=1)
     user = db.query(models.User).filter_by(id=1).first()
@@ -227,6 +303,13 @@ async def analyze_document_only(
             # ✅ 기존 문서의 경우엔 모델/코드가 저장되어 있지 않으므로 None
             "used_model": None,
             "base_code": None,
+            # [ADDED] 신규 아티팩트 키도 스키마 정합을 위해 명시(값은 없음)
+            "basecode_py_path": None,
+            "basecode_source": None,
+            "basecode_summary": None,
+            "spec": None,
+            "spec_warnings": None,
+            "basecode_error": None,
         }
 
     # 1) 파일 저장
@@ -252,8 +335,16 @@ async def analyze_document_only(
     used_model = result.get("used_model")  # ✅ 추가
     base_code = result.get("base_code", "") or ""  # ✅ 추가
 
-    KST = timezone(timedelta(hours=9))
-    created_at_str = datetime.now(KST).strftime("%Y-%m-%d %H:%M:%S")
+    # [ADDED] 템플릿 codegen 신규 아티팩트들 (있으면 응답에 포함)
+    basecode_py_path = result.get("basecode_py_path")
+    basecode_source = result.get("basecode_source")
+    basecode_summary = result.get("basecode_summary")
+    spec = result.get("spec")
+    spec_warnings = result.get("spec_warnings")
+    basecode_error = result.get("basecode_error")
+
+    # [CHANGED] uploaded_at은 datetime 필드로 저장(문자열이 아닌 datetime 권장)
+    uploaded_dt = datetime.utcnow()
 
     # 4) Document 저장
     document = models.Document(
@@ -262,8 +353,9 @@ async def analyze_document_only(
         file_path=file_path,
         summary=summary,
         domain=domain,
-        base_code=base_code,       # ✅ DB에 저장
-        uploaded_at=created_at_str,
+        # [ADDED] base_code를 DB에 보존하고 싶다면 모델에 컬럼이 있어야 함(없으면 주석 유지)
+        base_code=(basecode_source or base_code or None),  # [ADDED]
+        uploaded_at=uploaded_dt,  # [CHANGED]
     )
     db.add(document)
     db.commit()
@@ -273,7 +365,7 @@ async def analyze_document_only(
     if retriever and vectorstore:
         set_retriever(document.id, retriever, vectorstore)
 
-    # 6) 응답 (✅ used_model/base_code 포함)
+    # 6) 응답 (✅ used_model/base_code + 신규 아티팩트 포함)
     return {
         "message": "Document analyzed.",
         "document_id": document.id,
@@ -281,4 +373,11 @@ async def analyze_document_only(
         "domain": domain,
         "used_model": used_model,  # ✅
         "base_code": base_code,  # ✅
+        # [ADDED] 신규 아티팩트
+        "basecode_py_path": basecode_py_path,
+        "basecode_source": basecode_source,
+        "basecode_summary": basecode_summary,
+        "spec": spec,
+        "spec_warnings": spec_warnings,
+        "basecode_error": basecode_error,
     }

@@ -1,0 +1,1004 @@
+{
+  "autoencoder": {
+    "template_key": "autoencoder",
+    "family": "CNN",
+    "framework": "tensorflow.keras",
+    "task": "autoencoding",
+    "model": {},
+    "training": {
+      "epochs": 3,
+      "batch_size": 32
+    },
+    "compile": {},
+    "fit": {},
+    "blocks": {
+      "RESIDUAL_STAGE_3": {
+        "params": {},
+        "code": "# TODO: cnn stage3\n"
+      },
+      "RESIDUAL_STAGE_2": {
+        "params": {},
+        "code": "# TODO: cnn stage2\n"
+      },
+      "RESIDUAL_STAGE_1": {
+        "params": {},
+        "code": "# TODO: cnn stage1\n"
+      },
+      "regularizer": {
+        "params": {},
+        "code": "# TODO: provide code for slot regularizer\n"
+      },
+      "imports_extra": {
+        "params": {},
+        "code": "import math\n"
+      },
+      "CLASSIFIER_HEAD": {
+        "params": {},
+        "code": "# TODO: cnn head\n"
+      },
+      "encoder": {
+        "params": {},
+        "code": "# TODO: provide code for slot encoder\n"
+      },
+      "STEM_BLOCK": {
+        "params": {},
+        "code": "# TODO: cnn stem\n"
+      },
+      "decoder": {
+        "params": {},
+        "code": "# TODO: provide code for slot decoder\n"
+      },
+      "head": {
+        "params": {},
+        "code": "# TODO: provide code for slot head\n"
+      },
+      "compile_override": {
+        "params": {},
+        "code": "# TODO: provide code for slot compile_override\n"
+      },
+      "FIT_KWARGS": {
+        "params": {},
+        "code": "shuffle=True\n"
+      },
+      "callbacks": {
+        "params": {},
+        "code": "# TODO: provide code for slot callbacks\n"
+      },
+      "se_squeeze_excitation": {
+        "params": {},
+        "code": "se = layers.GlobalAveragePooling2D()(x)\nse = layers.Dense(int(x.shape[-1]*{se_ratio}), activation='relu')(se)\nse = layers.Dense(int(x.shape[-1]), activation='sigmoid')(se)\nse = layers.Reshape((1,1,int(x.shape[-1])))(se)\nx = layers.Multiply()([x, se])\n"
+      },
+      "stochastic_depth": {
+        "params": {},
+        "code": "if {drop_rate} > 0:\n    import tensorflow as tf\n    keep = 1.0 - {drop_rate}\n    shape = (tf.shape(x)[0],) + (1,)* (len(x.shape)-1)\n    rnd = tf.random.uniform(shape, dtype=x.dtype)\n    mask = tf.floor(rnd + keep) / keep\n    x = x * mask\nx = layers.Add()([x, shortcut])\n"
+      },
+      "inception_mixed": {
+        "params": {},
+        "code": "b1 = layers.Conv2D({filters}, 1, padding='same', activation='relu')(x)\nb2 = layers.Conv2D({filters}, 1, padding='same', activation='relu')(x)\nb2 = layers.Conv2D({filters}, 3, padding='same', activation='relu')(b2)\nb3 = layers.Conv2D({filters}, 1, padding='same', activation='relu')(x)\nb3 = layers.Conv2D({filters}, 5, padding='same', activation='relu')(b3)\nb4 = layers.MaxPool2D(3, strides=1, padding='same')(x)\nb4 = layers.Conv2D({filters}, 1, padding='same', activation='relu')(b4)\nx = layers.Concatenate()([b1,b2,b3,b4])\n"
+      },
+      "stages": {
+        "params": {},
+        "code": "for si, (filters, blocks) in enumerate(zip({filters_list}, {blocks_per_stage})):\n    for bi in range(blocks):\n        sc = x\n        x = layers.Conv2D(filters, 3, padding='same', use_bias=False, name=f's{si}_b{bi}_conv1')(x)\n        x = layers.BatchNormalization(name=f's{si}_b{bi}_bn1')(x)\n        x = layers.ReLU(name=f's{si}_b{bi}_relu1')(x)\n        x = layers.Conv2D(filters, 3, padding='same', use_bias=False, name=f's{si}_b{bi}_conv2')(x)\n        x = layers.BatchNormalization(name=f's{si}_b{bi}_bn2')(x)\n        x = layers.Add(name=f's{si}_b{bi}_add')([x, sc])\n        x = layers.ReLU(name=f's{si}_b{bi}_out')(x)\n"
+      },
+      "model_body_extra": {
+        "params": {},
+        "code": "# TODO: provide code for slot model_body_extra\n"
+      },
+      "gan_loss": {
+        "params": {},
+        "code": "# TODO: provide code for slot gan_loss\n"
+      },
+      "discriminator_block": {
+        "params": {},
+        "code": "# TODO: provide code for slot discriminator_block\n"
+      },
+      "generator_blocks": {
+        "params": {},
+        "code": "# TODO: provide code for slot generator_blocks\n"
+      },
+      "encoder_blocks": {
+        "params": {},
+        "code": "# TODO: provide code for slot encoder_blocks\n"
+      },
+      "decoder_blocks": {
+        "params": {},
+        "code": "# TODO: provide code for slot decoder_blocks\n"
+      },
+      "kl_anneal": {
+        "params": {},
+        "code": "# TODO: provide code for slot kl_anneal\n"
+      },
+      "latent": {
+        "params": {},
+        "code": "# TODO: provide code for slot latent\n"
+      }
+    }
+  },
+  "cnn_family": {
+    "template_key": "cnn_family",
+    "family": "CNN",
+    "framework": "tensorflow.keras",
+    "task": "image_classification",
+    "model": {},
+    "training": {
+      "epochs": 3,
+      "batch_size": 32
+    },
+    "compile": {},
+    "fit": {},
+    "blocks": {
+      "RESIDUAL_STAGE_3": {
+        "params": {},
+        "code": "# TODO: cnn stage3\n"
+      },
+      "RESIDUAL_STAGE_2": {
+        "params": {},
+        "code": "# TODO: cnn stage2\n"
+      },
+      "RESIDUAL_STAGE_1": {
+        "params": {},
+        "code": "# TODO: cnn stage1\n"
+      },
+      "se_squeeze_excitation": {
+        "params": {},
+        "code": "se = layers.GlobalAveragePooling2D()(x)\nse = layers.Dense(int(x.shape[-1]*{se_ratio}), activation='relu')(se)\nse = layers.Dense(int(x.shape[-1]), activation='sigmoid')(se)\nse = layers.Reshape((1,1,int(x.shape[-1])))(se)\nx = layers.Multiply()([x, se])\n"
+      },
+      "stochastic_depth": {
+        "params": {},
+        "code": "if {drop_rate} > 0:\n    import tensorflow as tf\n    keep = 1.0 - {drop_rate}\n    shape = (tf.shape(x)[0],) + (1,)* (len(x.shape)-1)\n    rnd = tf.random.uniform(shape, dtype=x.dtype)\n    mask = tf.floor(rnd + keep) / keep\n    x = x * mask\nx = layers.Add()([x, shortcut])\n"
+      },
+      "inception_mixed": {
+        "params": {},
+        "code": "b1 = layers.Conv2D({filters}, 1, padding='same', activation='relu')(x)\nb2 = layers.Conv2D({filters}, 1, padding='same', activation='relu')(x)\nb2 = layers.Conv2D({filters}, 3, padding='same', activation='relu')(b2)\nb3 = layers.Conv2D({filters}, 1, padding='same', activation='relu')(x)\nb3 = layers.Conv2D({filters}, 5, padding='same', activation='relu')(b3)\nb4 = layers.MaxPool2D(3, strides=1, padding='same')(x)\nb4 = layers.Conv2D({filters}, 1, padding='same', activation='relu')(b4)\nx = layers.Concatenate()([b1,b2,b3,b4])\n"
+      },
+      "imports_extra": {
+        "params": {},
+        "code": "import math\n"
+      },
+      "STEM_BLOCK": {
+        "params": {},
+        "code": "# TODO: cnn stem\n"
+      },
+      "stages": {
+        "params": {},
+        "code": "for si, (filters, blocks) in enumerate(zip({filters_list}, {blocks_per_stage})):\n    for bi in range(blocks):\n        sc = x\n        x = layers.Conv2D(filters, 3, padding='same', use_bias=False, name=f's{si}_b{bi}_conv1')(x)\n        x = layers.BatchNormalization(name=f's{si}_b{bi}_bn1')(x)\n        x = layers.ReLU(name=f's{si}_b{bi}_relu1')(x)\n        x = layers.Conv2D(filters, 3, padding='same', use_bias=False, name=f's{si}_b{bi}_conv2')(x)\n        x = layers.BatchNormalization(name=f's{si}_b{bi}_bn2')(x)\n        x = layers.Add(name=f's{si}_b{bi}_add')([x, sc])\n        x = layers.ReLU(name=f's{si}_b{bi}_out')(x)\n"
+      },
+      "CLASSIFIER_HEAD": {
+        "params": {},
+        "code": "# TODO: cnn head\n"
+      },
+      "head": {
+        "params": {},
+        "code": "# TODO: provide code for slot head\n"
+      },
+      "compile_override": {
+        "params": {},
+        "code": "# TODO: provide code for slot compile_override\n"
+      },
+      "FIT_KWARGS": {
+        "params": {},
+        "code": "shuffle=True\n"
+      },
+      "callbacks": {
+        "params": {},
+        "code": "# TODO: provide code for slot callbacks\n"
+      },
+      "model_body_extra": {
+        "params": {},
+        "code": "# TODO: provide code for slot model_body_extra\n"
+      },
+      "regularizer": {
+        "params": {},
+        "code": "# TODO: provide code for slot regularizer\n"
+      },
+      "encoder": {
+        "params": {},
+        "code": "# TODO: provide code for slot encoder\n"
+      },
+      "decoder": {
+        "params": {},
+        "code": "# TODO: provide code for slot decoder\n"
+      },
+      "gan_loss": {
+        "params": {},
+        "code": "# TODO: provide code for slot gan_loss\n"
+      },
+      "discriminator_block": {
+        "params": {},
+        "code": "# TODO: provide code for slot discriminator_block\n"
+      },
+      "generator_blocks": {
+        "params": {},
+        "code": "# TODO: provide code for slot generator_blocks\n"
+      },
+      "encoder_blocks": {
+        "params": {},
+        "code": "# TODO: provide code for slot encoder_blocks\n"
+      },
+      "decoder_blocks": {
+        "params": {},
+        "code": "# TODO: provide code for slot decoder_blocks\n"
+      },
+      "kl_anneal": {
+        "params": {},
+        "code": "# TODO: provide code for slot kl_anneal\n"
+      },
+      "latent": {
+        "params": {},
+        "code": "# TODO: provide code for slot latent\n"
+      }
+    }
+  },
+  "gan": {
+    "template_key": "gan",
+    "family": "CNN",
+    "framework": "tensorflow.keras",
+    "task": "image_generation_gan",
+    "model": {},
+    "training": {
+      "epochs": 3,
+      "batch_size": 32
+    },
+    "compile": {},
+    "fit": {},
+    "blocks": {
+      "RESIDUAL_STAGE_3": {
+        "params": {},
+        "code": "# TODO: cnn stage3\n"
+      },
+      "RESIDUAL_STAGE_2": {
+        "params": {},
+        "code": "# TODO: cnn stage2\n"
+      },
+      "RESIDUAL_STAGE_1": {
+        "params": {},
+        "code": "# TODO: cnn stage1\n"
+      },
+      "gan_loss": {
+        "params": {},
+        "code": "# TODO: provide code for slot gan_loss\n"
+      },
+      "discriminator_block": {
+        "params": {},
+        "code": "# TODO: provide code for slot discriminator_block\n"
+      },
+      "imports_extra": {
+        "params": {},
+        "code": "import math\n"
+      },
+      "generator_blocks": {
+        "params": {},
+        "code": "# TODO: provide code for slot generator_blocks\n"
+      },
+      "STEM_BLOCK": {
+        "params": {},
+        "code": "# TODO: cnn stem\n"
+      },
+      "CLASSIFIER_HEAD": {
+        "params": {},
+        "code": "# TODO: cnn head\n"
+      },
+      "compile_override": {
+        "params": {},
+        "code": "# TODO: provide code for slot compile_override\n"
+      },
+      "FIT_KWARGS": {
+        "params": {},
+        "code": "shuffle=True\n"
+      },
+      "callbacks": {
+        "params": {},
+        "code": "# TODO: provide code for slot callbacks\n"
+      },
+      "head": {
+        "params": {},
+        "code": "# TODO: provide code for slot head\n"
+      },
+      "regularizer": {
+        "params": {},
+        "code": "# TODO: provide code for slot regularizer\n"
+      },
+      "encoder": {
+        "params": {},
+        "code": "# TODO: provide code for slot encoder\n"
+      },
+      "decoder": {
+        "params": {},
+        "code": "# TODO: provide code for slot decoder\n"
+      },
+      "se_squeeze_excitation": {
+        "params": {},
+        "code": "se = layers.GlobalAveragePooling2D()(x)\nse = layers.Dense(int(x.shape[-1]*{se_ratio}), activation='relu')(se)\nse = layers.Dense(int(x.shape[-1]), activation='sigmoid')(se)\nse = layers.Reshape((1,1,int(x.shape[-1])))(se)\nx = layers.Multiply()([x, se])\n"
+      },
+      "stochastic_depth": {
+        "params": {},
+        "code": "if {drop_rate} > 0:\n    import tensorflow as tf\n    keep = 1.0 - {drop_rate}\n    shape = (tf.shape(x)[0],) + (1,)* (len(x.shape)-1)\n    rnd = tf.random.uniform(shape, dtype=x.dtype)\n    mask = tf.floor(rnd + keep) / keep\n    x = x * mask\nx = layers.Add()([x, shortcut])\n"
+      },
+      "inception_mixed": {
+        "params": {},
+        "code": "b1 = layers.Conv2D({filters}, 1, padding='same', activation='relu')(x)\nb2 = layers.Conv2D({filters}, 1, padding='same', activation='relu')(x)\nb2 = layers.Conv2D({filters}, 3, padding='same', activation='relu')(b2)\nb3 = layers.Conv2D({filters}, 1, padding='same', activation='relu')(x)\nb3 = layers.Conv2D({filters}, 5, padding='same', activation='relu')(b3)\nb4 = layers.MaxPool2D(3, strides=1, padding='same')(x)\nb4 = layers.Conv2D({filters}, 1, padding='same', activation='relu')(b4)\nx = layers.Concatenate()([b1,b2,b3,b4])\n"
+      },
+      "stages": {
+        "params": {},
+        "code": "for si, (filters, blocks) in enumerate(zip({filters_list}, {blocks_per_stage})):\n    for bi in range(blocks):\n        sc = x\n        x = layers.Conv2D(filters, 3, padding='same', use_bias=False, name=f's{si}_b{bi}_conv1')(x)\n        x = layers.BatchNormalization(name=f's{si}_b{bi}_bn1')(x)\n        x = layers.ReLU(name=f's{si}_b{bi}_relu1')(x)\n        x = layers.Conv2D(filters, 3, padding='same', use_bias=False, name=f's{si}_b{bi}_conv2')(x)\n        x = layers.BatchNormalization(name=f's{si}_b{bi}_bn2')(x)\n        x = layers.Add(name=f's{si}_b{bi}_add')([x, sc])\n        x = layers.ReLU(name=f's{si}_b{bi}_out')(x)\n"
+      },
+      "model_body_extra": {
+        "params": {},
+        "code": "# TODO: provide code for slot model_body_extra\n"
+      },
+      "encoder_blocks": {
+        "params": {},
+        "code": "# TODO: provide code for slot encoder_blocks\n"
+      },
+      "decoder_blocks": {
+        "params": {},
+        "code": "# TODO: provide code for slot decoder_blocks\n"
+      },
+      "kl_anneal": {
+        "params": {},
+        "code": "# TODO: provide code for slot kl_anneal\n"
+      },
+      "latent": {
+        "params": {},
+        "code": "# TODO: provide code for slot latent\n"
+      }
+    }
+  },
+  "resnet": {
+    "template_key": "resnet",
+    "family": "CNN",
+    "framework": "tensorflow.keras",
+    "task": "image_classification",
+    "model": {},
+    "training": {
+      "epochs": 3,
+      "batch_size": 32
+    },
+    "compile": {},
+    "fit": {},
+    "blocks": {
+      "RESIDUAL_STAGE_3": {
+        "params": {},
+        "code": "# TODO: cnn stage3\n"
+      },
+      "RESIDUAL_STAGE_2": {
+        "params": {},
+        "code": "# TODO: cnn stage2\n"
+      },
+      "RESIDUAL_STAGE_1": {
+        "params": {},
+        "code": "# TODO: cnn stage1\n"
+      },
+      "imports_extra": {
+        "params": {},
+        "code": "import math\n"
+      },
+      "STEM_BLOCK": {
+        "params": {},
+        "code": "# TODO: cnn stem\n"
+      },
+      "stages": {
+        "params": {},
+        "code": "for si, (filters, blocks) in enumerate(zip({filters_list}, {blocks_per_stage})):\n    for bi in range(blocks):\n        sc = x\n        x = layers.Conv2D(filters, 3, padding='same', use_bias=False, name=f's{si}_b{bi}_conv1')(x)\n        x = layers.BatchNormalization(name=f's{si}_b{bi}_bn1')(x)\n        x = layers.ReLU(name=f's{si}_b{bi}_relu1')(x)\n        x = layers.Conv2D(filters, 3, padding='same', use_bias=False, name=f's{si}_b{bi}_conv2')(x)\n        x = layers.BatchNormalization(name=f's{si}_b{bi}_bn2')(x)\n        x = layers.Add(name=f's{si}_b{bi}_add')([x, sc])\n        x = layers.ReLU(name=f's{si}_b{bi}_out')(x)\n"
+      },
+      "head": {
+        "params": {},
+        "code": "# TODO: provide code for slot head\n"
+      },
+      "CLASSIFIER_HEAD": {
+        "params": {},
+        "code": "# TODO: cnn head\n"
+      },
+      "compile_override": {
+        "params": {},
+        "code": "# TODO: provide code for slot compile_override\n"
+      },
+      "FIT_KWARGS": {
+        "params": {},
+        "code": "shuffle=True\n"
+      },
+      "callbacks": {
+        "params": {},
+        "code": "# TODO: provide code for slot callbacks\n"
+      },
+      "model_body_extra": {
+        "params": {},
+        "code": "# TODO: provide code for slot model_body_extra\n"
+      },
+      "regularizer": {
+        "params": {},
+        "code": "# TODO: provide code for slot regularizer\n"
+      },
+      "encoder": {
+        "params": {},
+        "code": "# TODO: provide code for slot encoder\n"
+      },
+      "decoder": {
+        "params": {},
+        "code": "# TODO: provide code for slot decoder\n"
+      },
+      "se_squeeze_excitation": {
+        "params": {},
+        "code": "se = layers.GlobalAveragePooling2D()(x)\nse = layers.Dense(int(x.shape[-1]*{se_ratio}), activation='relu')(se)\nse = layers.Dense(int(x.shape[-1]), activation='sigmoid')(se)\nse = layers.Reshape((1,1,int(x.shape[-1])))(se)\nx = layers.Multiply()([x, se])\n"
+      },
+      "stochastic_depth": {
+        "params": {},
+        "code": "if {drop_rate} > 0:\n    import tensorflow as tf\n    keep = 1.0 - {drop_rate}\n    shape = (tf.shape(x)[0],) + (1,)* (len(x.shape)-1)\n    rnd = tf.random.uniform(shape, dtype=x.dtype)\n    mask = tf.floor(rnd + keep) / keep\n    x = x * mask\nx = layers.Add()([x, shortcut])\n"
+      },
+      "inception_mixed": {
+        "params": {},
+        "code": "b1 = layers.Conv2D({filters}, 1, padding='same', activation='relu')(x)\nb2 = layers.Conv2D({filters}, 1, padding='same', activation='relu')(x)\nb2 = layers.Conv2D({filters}, 3, padding='same', activation='relu')(b2)\nb3 = layers.Conv2D({filters}, 1, padding='same', activation='relu')(x)\nb3 = layers.Conv2D({filters}, 5, padding='same', activation='relu')(b3)\nb4 = layers.MaxPool2D(3, strides=1, padding='same')(x)\nb4 = layers.Conv2D({filters}, 1, padding='same', activation='relu')(b4)\nx = layers.Concatenate()([b1,b2,b3,b4])\n"
+      },
+      "gan_loss": {
+        "params": {},
+        "code": "# TODO: provide code for slot gan_loss\n"
+      },
+      "discriminator_block": {
+        "params": {},
+        "code": "# TODO: provide code for slot discriminator_block\n"
+      },
+      "generator_blocks": {
+        "params": {},
+        "code": "# TODO: provide code for slot generator_blocks\n"
+      },
+      "encoder_blocks": {
+        "params": {},
+        "code": "# TODO: provide code for slot encoder_blocks\n"
+      },
+      "decoder_blocks": {
+        "params": {},
+        "code": "# TODO: provide code for slot decoder_blocks\n"
+      },
+      "kl_anneal": {
+        "params": {},
+        "code": "# TODO: provide code for slot kl_anneal\n"
+      },
+      "latent": {
+        "params": {},
+        "code": "# TODO: provide code for slot latent\n"
+      }
+    }
+  },
+  "rnn_seq": {
+    "template_key": "rnn_seq",
+    "family": "RNN",
+    "framework": "tensorflow.keras",
+    "task": "seq2seq_toy",
+    "model": {},
+    "training": {
+      "epochs": 3,
+      "batch_size": 32
+    },
+    "compile": {},
+    "fit": {},
+    "blocks": {
+      "EMBEDDING_BLOCK": {
+        "params": {},
+        "code": "# TODO: rnn embeddings\n"
+      },
+      "ATTN_BLOCK": {
+        "params": {},
+        "code": "# TODO: rnn attention\n"
+      },
+      "attention_mech": {
+        "params": {},
+        "code": "# TODO: provide code for slot attention_mech\n"
+      },
+      "schedule": {
+        "params": {},
+        "code": "# TODO: provide code for slot schedule\n"
+      },
+      "imports_extra": {
+        "params": {},
+        "code": "# TODO: provide code for slot imports_extra\n"
+      },
+      "DECODER_BLOCK": {
+        "params": {},
+        "code": "# TODO: rnn decoder\n"
+      },
+      "ENCODER_BLOCK": {
+        "params": {},
+        "code": "# TODO: rnn encoder\n"
+      },
+      "rnn_stack": {
+        "params": {},
+        "code": "# TODO: provide code for slot rnn_stack\n"
+      },
+      "HEAD_BLOCK": {
+        "params": {},
+        "code": "# TODO: rnn head\n"
+      },
+      "head": {
+        "params": {},
+        "code": "# TODO: provide code for slot head\n"
+      },
+      "compile_override": {
+        "params": {},
+        "code": "# TODO: provide code for slot compile_override\n"
+      },
+      "FIT_KWARGS": {
+        "params": {},
+        "code": "shuffle=True\n"
+      },
+      "callbacks": {
+        "params": {},
+        "code": "# TODO: provide code for slot callbacks\n"
+      },
+      "model_body_extra": {
+        "params": {},
+        "code": "# TODO: provide code for slot model_body_extra\n"
+      }
+    }
+  },
+  "swin": {
+    "template_key": "swin",
+    "family": "CNN",
+    "framework": "tensorflow.keras",
+    "task": "image_classification",
+    "model": {},
+    "training": {
+      "epochs": 3,
+      "batch_size": 32
+    },
+    "compile": {},
+    "fit": {},
+    "blocks": {
+      "RESIDUAL_STAGE_3": {
+        "params": {},
+        "code": "# TODO: cnn stage3\n"
+      },
+      "RESIDUAL_STAGE_2": {
+        "params": {},
+        "code": "# TODO: cnn stage2\n"
+      },
+      "RESIDUAL_STAGE_1": {
+        "params": {},
+        "code": "# TODO: cnn stage1\n"
+      },
+      "STEM_BLOCK": {
+        "params": {},
+        "code": "# TODO: cnn stem\n"
+      },
+      "CLASSIFIER_HEAD": {
+        "params": {},
+        "code": "# TODO: cnn head\n"
+      },
+      "FIT_KWARGS": {
+        "params": {},
+        "code": "shuffle=True\n"
+      },
+      "callbacks": {
+        "params": {},
+        "code": "# TODO: provide code for slot callbacks\n"
+      },
+      "compile_override": {
+        "params": {},
+        "code": "# TODO: provide code for slot compile_override\n"
+      },
+      "head": {
+        "params": {},
+        "code": "# TODO: provide code for slot head\n"
+      },
+      "imports_extra": {
+        "params": {},
+        "code": "import math\n"
+      },
+      "regularizer": {
+        "params": {},
+        "code": "# TODO: provide code for slot regularizer\n"
+      },
+      "encoder": {
+        "params": {},
+        "code": "# TODO: provide code for slot encoder\n"
+      },
+      "decoder": {
+        "params": {},
+        "code": "# TODO: provide code for slot decoder\n"
+      },
+      "se_squeeze_excitation": {
+        "params": {},
+        "code": "se = layers.GlobalAveragePooling2D()(x)\nse = layers.Dense(int(x.shape[-1]*{se_ratio}), activation='relu')(se)\nse = layers.Dense(int(x.shape[-1]), activation='sigmoid')(se)\nse = layers.Reshape((1,1,int(x.shape[-1])))(se)\nx = layers.Multiply()([x, se])\n"
+      },
+      "stochastic_depth": {
+        "params": {},
+        "code": "if {drop_rate} > 0:\n    import tensorflow as tf\n    keep = 1.0 - {drop_rate}\n    shape = (tf.shape(x)[0],) + (1,)* (len(x.shape)-1)\n    rnd = tf.random.uniform(shape, dtype=x.dtype)\n    mask = tf.floor(rnd + keep) / keep\n    x = x * mask\nx = layers.Add()([x, shortcut])\n"
+      },
+      "inception_mixed": {
+        "params": {},
+        "code": "b1 = layers.Conv2D({filters}, 1, padding='same', activation='relu')(x)\nb2 = layers.Conv2D({filters}, 1, padding='same', activation='relu')(x)\nb2 = layers.Conv2D({filters}, 3, padding='same', activation='relu')(b2)\nb3 = layers.Conv2D({filters}, 1, padding='same', activation='relu')(x)\nb3 = layers.Conv2D({filters}, 5, padding='same', activation='relu')(b3)\nb4 = layers.MaxPool2D(3, strides=1, padding='same')(x)\nb4 = layers.Conv2D({filters}, 1, padding='same', activation='relu')(b4)\nx = layers.Concatenate()([b1,b2,b3,b4])\n"
+      },
+      "model_body_extra": {
+        "params": {},
+        "code": "# TODO: provide code for slot model_body_extra\n"
+      },
+      "gan_loss": {
+        "params": {},
+        "code": "# TODO: provide code for slot gan_loss\n"
+      },
+      "discriminator_block": {
+        "params": {},
+        "code": "# TODO: provide code for slot discriminator_block\n"
+      },
+      "generator_blocks": {
+        "params": {},
+        "code": "# TODO: provide code for slot generator_blocks\n"
+      },
+      "encoder_blocks": {
+        "params": {},
+        "code": "# TODO: provide code for slot encoder_blocks\n"
+      },
+      "decoder_blocks": {
+        "params": {},
+        "code": "# TODO: provide code for slot decoder_blocks\n"
+      },
+      "kl_anneal": {
+        "params": {},
+        "code": "# TODO: provide code for slot kl_anneal\n"
+      },
+      "latent": {
+        "params": {},
+        "code": "# TODO: provide code for slot latent\n"
+      },
+      "stages": {
+        "params": {},
+        "code": "for si, (filters, blocks) in enumerate(zip({filters_list}, {blocks_per_stage})):\n    for bi in range(blocks):\n        sc = x\n        x = layers.Conv2D(filters, 3, padding='same', use_bias=False, name=f's{si}_b{bi}_conv1')(x)\n        x = layers.BatchNormalization(name=f's{si}_b{bi}_bn1')(x)\n        x = layers.ReLU(name=f's{si}_b{bi}_relu1')(x)\n        x = layers.Conv2D(filters, 3, padding='same', use_bias=False, name=f's{si}_b{bi}_conv2')(x)\n        x = layers.BatchNormalization(name=f's{si}_b{bi}_bn2')(x)\n        x = layers.Add(name=f's{si}_b{bi}_add')([x, sc])\n        x = layers.ReLU(name=f's{si}_b{bi}_out')(x)\n"
+      }
+    }
+  },
+  "transformer": {
+    "template_key": "transformer",
+    "family": "Transformer",
+    "framework": "tensorflow.keras",
+    "task": "sequence_modeling",
+    "model": {},
+    "training": {
+      "epochs": 3,
+      "batch_size": 32
+    },
+    "compile": {},
+    "fit": {},
+    "blocks": {
+      "MODEL_IMPORTS": {
+        "params": {},
+        "code": "import tensorflow as tf\nfrom tensorflow import keras\nfrom tensorflow.keras import layers\n"
+      },
+      "imports_extra": {
+        "params": {},
+        "code": "# TODO: provide code for slot imports_extra\n"
+      },
+      "EMBEDDING_BLOCK": {
+        "params": {},
+        "code": "src_emb = layers.Embedding(input_dim={vocab_size_src}, output_dim={d_model}, mask_zero=True)(src_tokens)\ntgt_emb = layers.Embedding(input_dim={vocab_size_tgt}, output_dim={d_model}, mask_zero=True)(tgt_tokens)\nenc_inp = src_emb\ndec_inp = tgt_emb\n"
+      },
+      "ENCODER_STACK_BLOCK": {
+        "params": {},
+        "code": "# TODO: encoder stack\n"
+      },
+      "DECODER_STACK_BLOCK": {
+        "params": {},
+        "code": "# TODO: decoder stack\n"
+      },
+      "HEAD_BLOCK": {
+        "params": {},
+        "code": "logits = layers.Dense({vocab_size_tgt})(decoder_out)\n"
+      },
+      "compile_override": {
+        "params": {},
+        "code": "# TODO: provide code for slot compile_override\n"
+      },
+      "FIT_KWARGS": {
+        "params": {},
+        "code": "shuffle=True\n"
+      },
+      "callbacks": {
+        "params": {},
+        "code": "# TODO: provide code for slot callbacks\n"
+      },
+      "decoder_layers": {
+        "params": {},
+        "code": "# TODO: provide code for slot decoder_layers\n"
+      },
+      "head": {
+        "params": {},
+        "code": "# TODO: provide code for slot head\n"
+      },
+      "model_body_extra": {
+        "params": {},
+        "code": "# TODO: provide code for slot model_body_extra\n"
+      }
+    }
+  },
+  "transformer_mt": {
+    "template_key": "transformer_mt",
+    "family": "Transformer",
+    "framework": "tensorflow.keras",
+    "task": "sequence_to_sequence_mt",
+    "model": {},
+    "training": {
+      "epochs": 3,
+      "batch_size": 32
+    },
+    "compile": {},
+    "fit": {},
+    "blocks": {
+      "MODEL_IMPORTS": {
+        "params": {},
+        "code": "import tensorflow as tf\nfrom tensorflow import keras\nfrom tensorflow.keras import layers\n"
+      },
+      "imports_extra": {
+        "params": {},
+        "code": "# TODO: provide code for slot imports_extra\n"
+      },
+      "EMBEDDING_BLOCK": {
+        "params": {},
+        "code": "src_emb = layers.Embedding(input_dim={vocab_size_src}, output_dim={d_model}, mask_zero=True)(src_tokens)\ntgt_emb = layers.Embedding(input_dim={vocab_size_tgt}, output_dim={d_model}, mask_zero=True)(tgt_tokens)\nenc_inp = src_emb\ndec_inp = tgt_emb\n"
+      },
+      "ENCODER_STACK_BLOCK": {
+        "params": {},
+        "code": "# TODO: encoder stack\n"
+      },
+      "DECODER_STACK_BLOCK": {
+        "params": {},
+        "code": "# TODO: decoder stack\n"
+      },
+      "HEAD_BLOCK": {
+        "params": {},
+        "code": "logits = layers.Dense({vocab_size_tgt})(decoder_out)\n"
+      },
+      "decoder_layers": {
+        "params": {},
+        "code": "# TODO: provide code for slot decoder_layers\n"
+      },
+      "compile_override": {
+        "params": {},
+        "code": "# TODO: provide code for slot compile_override\n"
+      },
+      "FIT_KWARGS": {
+        "params": {},
+        "code": "shuffle=True\n"
+      },
+      "callbacks": {
+        "params": {},
+        "code": "# TODO: provide code for slot callbacks\n"
+      },
+      "head": {
+        "params": {},
+        "code": "# TODO: provide code for slot head\n"
+      },
+      "model_body_extra": {
+        "params": {},
+        "code": "# TODO: provide code for slot model_body_extra\n"
+      }
+    }
+  },
+  "unet": {
+    "template_key": "unet",
+    "family": "CNN",
+    "framework": "tensorflow.keras",
+    "task": "image_segmentation",
+    "model": {},
+    "training": {
+      "epochs": 3,
+      "batch_size": 32
+    },
+    "compile": {},
+    "fit": {},
+    "blocks": {
+      "CLASSIFIER_HEAD": {
+        "params": {},
+        "code": "# TODO: cnn head\n"
+      },
+      "RESIDUAL_STAGE_3": {
+        "params": {},
+        "code": "# TODO: cnn stage3\n"
+      },
+      "RESIDUAL_STAGE_2": {
+        "params": {},
+        "code": "# TODO: cnn stage2\n"
+      },
+      "RESIDUAL_STAGE_1": {
+        "params": {},
+        "code": "# TODO: cnn stage1\n"
+      },
+      "imports_extra": {
+        "params": {},
+        "code": "import math\n"
+      },
+      "STEM_BLOCK": {
+        "params": {},
+        "code": "# TODO: cnn stem\n"
+      },
+      "encoder_blocks": {
+        "params": {},
+        "code": "# TODO: provide code for slot encoder_blocks\n"
+      },
+      "decoder_blocks": {
+        "params": {},
+        "code": "# TODO: provide code for slot decoder_blocks\n"
+      },
+      "head": {
+        "params": {},
+        "code": "# TODO: provide code for slot head\n"
+      },
+      "compile_override": {
+        "params": {},
+        "code": "# TODO: provide code for slot compile_override\n"
+      },
+      "FIT_KWARGS": {
+        "params": {},
+        "code": "shuffle=True\n"
+      },
+      "callbacks": {
+        "params": {},
+        "code": "# TODO: provide code for slot callbacks\n"
+      },
+      "regularizer": {
+        "params": {},
+        "code": "# TODO: provide code for slot regularizer\n"
+      },
+      "encoder": {
+        "params": {},
+        "code": "# TODO: provide code for slot encoder\n"
+      },
+      "decoder": {
+        "params": {},
+        "code": "# TODO: provide code for slot decoder\n"
+      },
+      "se_squeeze_excitation": {
+        "params": {},
+        "code": "se = layers.GlobalAveragePooling2D()(x)\nse = layers.Dense(int(x.shape[-1]*{se_ratio}), activation='relu')(se)\nse = layers.Dense(int(x.shape[-1]), activation='sigmoid')(se)\nse = layers.Reshape((1,1,int(x.shape[-1])))(se)\nx = layers.Multiply()([x, se])\n"
+      },
+      "stochastic_depth": {
+        "params": {},
+        "code": "if {drop_rate} > 0:\n    import tensorflow as tf\n    keep = 1.0 - {drop_rate}\n    shape = (tf.shape(x)[0],) + (1,)* (len(x.shape)-1)\n    rnd = tf.random.uniform(shape, dtype=x.dtype)\n    mask = tf.floor(rnd + keep) / keep\n    x = x * mask\nx = layers.Add()([x, shortcut])\n"
+      },
+      "inception_mixed": {
+        "params": {},
+        "code": "b1 = layers.Conv2D({filters}, 1, padding='same', activation='relu')(x)\nb2 = layers.Conv2D({filters}, 1, padding='same', activation='relu')(x)\nb2 = layers.Conv2D({filters}, 3, padding='same', activation='relu')(b2)\nb3 = layers.Conv2D({filters}, 1, padding='same', activation='relu')(x)\nb3 = layers.Conv2D({filters}, 5, padding='same', activation='relu')(b3)\nb4 = layers.MaxPool2D(3, strides=1, padding='same')(x)\nb4 = layers.Conv2D({filters}, 1, padding='same', activation='relu')(b4)\nx = layers.Concatenate()([b1,b2,b3,b4])\n"
+      },
+      "stages": {
+        "params": {},
+        "code": "for si, (filters, blocks) in enumerate(zip({filters_list}, {blocks_per_stage})):\n    for bi in range(blocks):\n        sc = x\n        x = layers.Conv2D(filters, 3, padding='same', use_bias=False, name=f's{si}_b{bi}_conv1')(x)\n        x = layers.BatchNormalization(name=f's{si}_b{bi}_bn1')(x)\n        x = layers.ReLU(name=f's{si}_b{bi}_relu1')(x)\n        x = layers.Conv2D(filters, 3, padding='same', use_bias=False, name=f's{si}_b{bi}_conv2')(x)\n        x = layers.BatchNormalization(name=f's{si}_b{bi}_bn2')(x)\n        x = layers.Add(name=f's{si}_b{bi}_add')([x, sc])\n        x = layers.ReLU(name=f's{si}_b{bi}_out')(x)\n"
+      },
+      "model_body_extra": {
+        "params": {},
+        "code": "# TODO: provide code for slot model_body_extra\n"
+      },
+      "gan_loss": {
+        "params": {},
+        "code": "# TODO: provide code for slot gan_loss\n"
+      },
+      "discriminator_block": {
+        "params": {},
+        "code": "# TODO: provide code for slot discriminator_block\n"
+      },
+      "generator_blocks": {
+        "params": {},
+        "code": "# TODO: provide code for slot generator_blocks\n"
+      },
+      "kl_anneal": {
+        "params": {},
+        "code": "# TODO: provide code for slot kl_anneal\n"
+      },
+      "latent": {
+        "params": {},
+        "code": "# TODO: provide code for slot latent\n"
+      }
+    }
+  },
+  "vae": {
+    "template_key": "vae",
+    "family": "CNN",
+    "framework": "tensorflow.keras",
+    "task": "image_generation_vae",
+    "model": {},
+    "training": {
+      "epochs": 3,
+      "batch_size": 32
+    },
+    "compile": {},
+    "fit": {},
+    "blocks": {
+      "RESIDUAL_STAGE_3": {
+        "params": {},
+        "code": "# TODO: cnn stage3\n"
+      },
+      "RESIDUAL_STAGE_2": {
+        "params": {},
+        "code": "# TODO: cnn stage2\n"
+      },
+      "RESIDUAL_STAGE_1": {
+        "params": {},
+        "code": "# TODO: cnn stage1\n"
+      },
+      "kl_anneal": {
+        "params": {},
+        "code": "# TODO: provide code for slot kl_anneal\n"
+      },
+      "imports_extra": {
+        "params": {},
+        "code": "import math\n"
+      },
+      "CLASSIFIER_HEAD": {
+        "params": {},
+        "code": "# TODO: cnn head\n"
+      },
+      "encoder": {
+        "params": {},
+        "code": "# TODO: provide code for slot encoder\n"
+      },
+      "STEM_BLOCK": {
+        "params": {},
+        "code": "# TODO: cnn stem\n"
+      },
+      "latent": {
+        "params": {},
+        "code": "# TODO: provide code for slot latent\n"
+      },
+      "decoder": {
+        "params": {},
+        "code": "# TODO: provide code for slot decoder\n"
+      },
+      "head": {
+        "params": {},
+        "code": "# TODO: provide code for slot head\n"
+      },
+      "compile_override": {
+        "params": {},
+        "code": "# TODO: provide code for slot compile_override\n"
+      },
+      "FIT_KWARGS": {
+        "params": {},
+        "code": "shuffle=True\n"
+      },
+      "callbacks": {
+        "params": {},
+        "code": "# TODO: provide code for slot callbacks\n"
+      },
+      "regularizer": {
+        "params": {},
+        "code": "# TODO: provide code for slot regularizer\n"
+      },
+      "se_squeeze_excitation": {
+        "params": {},
+        "code": "se = layers.GlobalAveragePooling2D()(x)\nse = layers.Dense(int(x.shape[-1]*{se_ratio}), activation='relu')(se)\nse = layers.Dense(int(x.shape[-1]), activation='sigmoid')(se)\nse = layers.Reshape((1,1,int(x.shape[-1])))(se)\nx = layers.Multiply()([x, se])\n"
+      },
+      "stochastic_depth": {
+        "params": {},
+        "code": "if {drop_rate} > 0:\n    import tensorflow as tf\n    keep = 1.0 - {drop_rate}\n    shape = (tf.shape(x)[0],) + (1,)* (len(x.shape)-1)\n    rnd = tf.random.uniform(shape, dtype=x.dtype)\n    mask = tf.floor(rnd + keep) / keep\n    x = x * mask\nx = layers.Add()([x, shortcut])\n"
+      },
+      "inception_mixed": {
+        "params": {},
+        "code": "b1 = layers.Conv2D({filters}, 1, padding='same', activation='relu')(x)\nb2 = layers.Conv2D({filters}, 1, padding='same', activation='relu')(x)\nb2 = layers.Conv2D({filters}, 3, padding='same', activation='relu')(b2)\nb3 = layers.Conv2D({filters}, 1, padding='same', activation='relu')(x)\nb3 = layers.Conv2D({filters}, 5, padding='same', activation='relu')(b3)\nb4 = layers.MaxPool2D(3, strides=1, padding='same')(x)\nb4 = layers.Conv2D({filters}, 1, padding='same', activation='relu')(b4)\nx = layers.Concatenate()([b1,b2,b3,b4])\n"
+      },
+      "stages": {
+        "params": {},
+        "code": "for si, (filters, blocks) in enumerate(zip({filters_list}, {blocks_per_stage})):\n    for bi in range(blocks):\n        sc = x\n        x = layers.Conv2D(filters, 3, padding='same', use_bias=False, name=f's{si}_b{bi}_conv1')(x)\n        x = layers.BatchNormalization(name=f's{si}_b{bi}_bn1')(x)\n        x = layers.ReLU(name=f's{si}_b{bi}_relu1')(x)\n        x = layers.Conv2D(filters, 3, padding='same', use_bias=False, name=f's{si}_b{bi}_conv2')(x)\n        x = layers.BatchNormalization(name=f's{si}_b{bi}_bn2')(x)\n        x = layers.Add(name=f's{si}_b{bi}_add')([x, sc])\n        x = layers.ReLU(name=f's{si}_b{bi}_out')(x)\n"
+      },
+      "model_body_extra": {
+        "params": {},
+        "code": "# TODO: provide code for slot model_body_extra\n"
+      },
+      "gan_loss": {
+        "params": {},
+        "code": "# TODO: provide code for slot gan_loss\n"
+      },
+      "discriminator_block": {
+        "params": {},
+        "code": "# TODO: provide code for slot discriminator_block\n"
+      },
+      "generator_blocks": {
+        "params": {},
+        "code": "# TODO: provide code for slot generator_blocks\n"
+      },
+      "encoder_blocks": {
+        "params": {},
+        "code": "# TODO: provide code for slot encoder_blocks\n"
+      },
+      "decoder_blocks": {
+        "params": {},
+        "code": "# TODO: provide code for slot decoder_blocks\n"
+      }
+    }
+  }
+}
