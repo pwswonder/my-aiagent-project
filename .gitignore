@@ -10,3 +10,14 @@ __pycache__/
 *.pyd
 *.egg-info/
 .env
+# OS / 편집기
+.DS_Store
+*.log
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.egg-info/
+.env
