@@ -1,2 +1,12 @@
 .env
-app_test.py
+app_test.py# OS / 편집기
+.DS_Store
+*.log
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.egg-info/
+.env
