@@ -5,7 +5,7 @@ import mimetypes
 from pathlib import Path
 from typing import Any, TypeVar
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 
 from paper_agent_v2.config import Settings, get_settings
 
@@ -65,20 +65,41 @@ class OpenAIProvider:
         instructions: str,
         prompt: str,
     ) -> SchemaT:
-        response = self._client.responses.create(
-            model=self._model,
-            instructions=instructions,
-            input=prompt,
-            text={
-                "format": {
-                    "type": "json_schema",
-                    "name": schema.__name__,
-                    "strict": True,
-                    "schema": schema.model_json_schema(),
-                }
-            },
-        )
-        return schema.model_validate_json(response.output_text)
+        current_prompt = prompt
+        last_error: ValidationError | None = None
+        for attempt in range(3):
+            response = self._client.responses.create(
+                model=self._model,
+                instructions=instructions,
+                input=current_prompt,
+                text={
+                    "format": {
+                        "type": "json_schema",
+                        "name": schema.__name__,
+                        # ModelGraphSpec intentionally contains open-ended parameter
+                        # dictionaries for novel architecture blocks. OpenAI strict
+                        # schemas reject those objects because they cannot use
+                        # additionalProperties. Pydantic still validates the result.
+                        "strict": False,
+                        "schema": schema.model_json_schema(),
+                    }
+                },
+            )
+            try:
+                return schema.model_validate_json(response.output_text)
+            except ValidationError as exc:
+                last_error = exc
+                if attempt == 2:
+                    break
+                current_prompt = (
+                    f"{prompt}\n\nYour previous JSON failed application validation. Correct only the invalid "
+                    "fields while preserving the evidence-grounded content. A share_with value must be the id "
+                    "of another node in nodes; omit it when weight sharing is not explicit. Node inputs must be "
+                    "graph input names or outputs produced by nodes.\n\n"
+                    f"INVALID_JSON:\n{response.output_text}\n\nVALIDATION_ERROR:\n{exc}"
+                )
+        assert last_error is not None
+        raise last_error
 
     def generate_text(self, *, instructions: str, prompt: str) -> str:
         response = self._client.responses.create(

@@ -37,6 +37,23 @@ class GitHubSourceResolver:
         match = REPO_PATH_RE.match(parsed.path)
         return "/".join(match.groups()) if match else None
 
+    @staticmethod
+    def matches_paper(full_name: str, description: str | None, paper_title: str) -> bool:
+        title_words = re.findall(r"[a-z0-9]+", paper_title.lower())
+        significant = {word for word in title_words if len(word) > 4}
+        acronym_words = [word for word in title_words if word not in {"a", "an", "the", "for", "of"}]
+        acronyms = {
+            "".join(word[0] for word in acronym_words[start:end])
+            for start in range(len(acronym_words))
+            for end in range(start + 3, min(start + 8, len(acronym_words)) + 1)
+        }
+        haystack = f"{full_name} {description or ''}".lower()
+        repository_name = full_name.rsplit("/", 1)[-1].lower()
+        return bool(
+            significant.intersection(re.findall(r"[a-z0-9]+", haystack))
+            or acronyms.intersection({repository_name, *re.findall(r"[a-z0-9]+", haystack)})
+        )
+
     def resolve(self, url: str, paper_title: str) -> OfficialCodeSource | None:
         full_name = self.full_name(url)
         if not full_name:
@@ -50,9 +67,7 @@ class GitHubSourceResolver:
         if commit_response.status_code != 200:
             return None
         description = payload.get("description")
-        haystack = f"{full_name} {description or ''}".lower()
-        title_tokens = {token for token in re.findall(r"[a-z0-9]+", paper_title.lower()) if len(token) > 4}
-        verified = bool(title_tokens and title_tokens.intersection(re.findall(r"[a-z0-9]+", haystack)))
+        verified = self.matches_paper(full_name, description, paper_title)
         license_payload = payload.get("license") or {}
         reference_files: list[str] = []
         tree_response = self.client.get(
@@ -67,10 +82,18 @@ class GitHubSourceResolver:
                 and str(item.get("path", "")).lower().endswith((".py", ".yaml", ".yml", ".json"))
                 and any(
                     token in str(item.get("path", "")).lower()
-                    for token in ("model", "network", "module", "config", "train")
+                    for token in ("model", "network", "module", "config", "train", "pvt", "transformer", "backbone")
                 )
             ]
-            reference_files = sorted(candidates)[:50]
+            repository_name = full_name.rsplit("/", 1)[-1].lower()
+            reference_files = sorted(
+                candidates,
+                key=lambda path: (
+                    0 if repository_name in path.lower() and "/configs/" not in path.lower() else 1,
+                    path.count("/"),
+                    path,
+                ),
+            )[:50]
         reference_excerpts: dict[str, str] = {}
         for path in reference_files[:5]:
             content_response = self.client.get(

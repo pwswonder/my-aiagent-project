@@ -5,5 +5,7 @@ import torch
 
 def make_example_inputs() -> dict[str, torch.Tensor]:
     return {
-{% for input in spec.inputs %}        {{ input.name | tojson }}: torch.randn(*{{ input_shapes[loop.index0] }}, dtype=torch.{{ input.dtype }}),
+{% for input in spec.inputs %}{% if input.dtype in ["int8", "int16", "int32", "int64", "uint8", "long", "bool"] %}        {{ input.name | tojson }}: torch.zeros(*{{ input_shapes[loop.index0] }}, dtype=torch.{{ input.dtype }}),
+{% else %}        {{ input.name | tojson }}: torch.randn(*{{ input_shapes[loop.index0] }}, dtype=torch.{{ input.dtype }}),
+{% endif %}
 {% endfor %}    }

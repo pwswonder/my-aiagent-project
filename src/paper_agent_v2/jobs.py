@@ -6,7 +6,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
-from sqlalchemy import func, select, update
+from sqlalchemy import delete, select, update
 from sqlalchemy.orm import Session
 
 from paper_agent_v2.analysis import analyze_paper
@@ -14,7 +14,7 @@ from paper_agent_v2.config import Settings, get_settings
 from paper_agent_v2.generation.custom import synthesize_custom_module, validate_custom_module
 from paper_agent_v2.generation.package_writer import write_package
 from paper_agent_v2.generation.renderer import render_model
-from paper_agent_v2.ir import ModelGraphSpec
+from paper_agent_v2.ir import Assumption, ModelGraphSpec, SpecStatus, UnresolvedItem
 from paper_agent_v2.models import (
     AnalysisRun,
     ArchitectureSpecRecord,
@@ -52,6 +52,24 @@ def append_event(run: AnalysisRun, stage: str, progress: int, message: str) -> N
     run.event_log = events
     run.stage = stage
     run.progress = progress
+
+
+def preserve_previous_spec_after_failed_refresh(
+    extracted: ModelGraphSpec, previous: ModelGraphSpec | None
+) -> ModelGraphSpec:
+    if extracted.nodes or previous is None or not previous.nodes:
+        return extracted
+    reason = extracted.unresolved[0].question if extracted.unresolved else "Architecture refresh failed validation."
+    previous.status = SpecStatus.NEEDS_REVIEW
+    if not any(item.field == "latest_analysis_refresh" for item in previous.unresolved):
+        previous.unresolved.append(
+            UnresolvedItem(
+                field="latest_analysis_refresh",
+                question=f"The latest refresh was not applied: {reason}",
+                blocking=False,
+            )
+        )
+    return previous
 
 
 def claim_next_run(session: Session) -> AnalysisRun | None:
@@ -115,6 +133,28 @@ def _record_chunks(session: Session, document: Document, result: Any, provider: 
         )
 
 
+def _auto_approve(spec: ModelGraphSpec) -> None:
+    """Record paper omissions as assumptions for the default one-click flow."""
+    existing = {item.field for item in spec.assumptions}
+    for item in spec.unresolved:
+        if not item.blocking:
+            continue
+        if item.field not in existing:
+            spec.assumptions.append(
+                Assumption(
+                    field=item.field,
+                    value="use the extracted model structure and registry defaults",
+                    reason=(
+                        "The paper did not fully specify this detail. The automatic flow records the "
+                        "generator's evidence-grounded value as an explicit assumption."
+                    ),
+                    confidence=0.35,
+                )
+            )
+        item.blocking = False
+    spec.approve()
+
+
 def process_analysis(session: Session, run: AnalysisRun, settings: Settings) -> None:
     document = session.get(Document, run.document_id)
     if document is None:
@@ -128,13 +168,40 @@ def process_analysis(session: Session, run: AnalysisRun, settings: Settings) -> 
         Path(document.storage_path),
         provider,
         max_bytes=settings.max_upload_bytes,
+        title_hint=Path(document.filename).stem,
         render_dir=render_dir,
         source_resolver=resolver,
     )
-    append_event(run, "persisting", 70, "saving chunks, evidence and Architecture IR")
+    latest_record = session.scalar(
+        select(ArchitectureSpecRecord)
+        .where(ArchitectureSpecRecord.document_id == document.id)
+        .order_by(ArchitectureSpecRecord.version.desc())
+        .limit(1)
+    )
+    previous_spec = ModelGraphSpec.model_validate(latest_record.spec_json) if latest_record else None
+    result.spec = preserve_previous_spec_after_failed_refresh(result.spec, previous_spec)
+    append_event(run, "persisting", 70, "saving chunks, evidence and model structure")
+    run.payload = {**(run.payload or {}), "summary": result.summary}
     document.sha256 = result.paper.sha256
-    document.title = result.paper.title
-    document.status = "needs_review"
+    paper_title = result.paper.title
+    if paper_title.strip().lower() in {"source", "untitled", "document"}:
+        paper_title = Path(document.filename).stem
+    document.title = paper_title
+    if result.spec.name.strip().lower() in {"source", "untitled", "document"}:
+        result.spec.name = paper_title
+    # Re-analysis replaces searchable material instead of retaining stale
+    # chunks and duplicated section/source records from earlier attempts.
+    session.execute(delete(Evidence).where(Evidence.document_id == document.id))
+    session.execute(delete(PaperSection).where(PaperSection.document_id == document.id))
+    session.execute(delete(ExternalSource).where(ExternalSource.document_id == document.id))
+    session.execute(delete(Chunk).where(Chunk.document_id == document.id))
+
+    auto_generate = bool(result.spec.nodes)
+    if auto_generate:
+        _auto_approve(result.spec)
+        document.status = "generating"
+    else:
+        document.status = "needs_review"
     _record_chunks(session, document, result, provider)
     section_pages: dict[str, list[int]] = {}
     for chunk in result.paper.chunks:
@@ -148,25 +215,16 @@ def process_analysis(session: Session, run: AnalysisRun, settings: Settings) -> 
                 page_end=max(pages),
             )
         )
-    version = (
-        int(
-            session.scalar(
-                select(func.coalesce(func.max(ArchitectureSpecRecord.version), 0)).where(
-                    ArchitectureSpecRecord.document_id == document.id
-                )
-            )
-            or 0
-        )
-        + 1
+    version = (latest_record.version if latest_record else 0) + 1
+    spec_record = ArchitectureSpecRecord(
+        document_id=document.id,
+        version=version,
+        status=result.spec.status.value,
+        spec_json=result.spec.model_dump(mode="json"),
+        approved_at=datetime.now(UTC) if auto_generate else None,
     )
-    session.add(
-        ArchitectureSpecRecord(
-            document_id=document.id,
-            version=version,
-            status=result.spec.status.value,
-            spec_json=result.spec.model_dump(mode="json"),
-        )
-    )
+    session.add(spec_record)
+    session.flush()
     for source in result.official_sources:
         session.add(
             ExternalSource(
@@ -178,8 +236,30 @@ def process_analysis(session: Session, run: AnalysisRun, settings: Settings) -> 
                 verified_official=source.verified,
             )
         )
+    if auto_generate:
+        generation = Generation(document_id=document.id, spec_id=spec_record.id)
+        session.add(generation)
+        session.flush()
+        session.add(
+            AnalysisRun(
+                document_id=document.id,
+                generation_id=generation.id,
+                kind="generation",
+                max_attempts=settings.max_job_attempts,
+                event_log=[
+                    {
+                        "sequence": 1,
+                        "stage": "queued",
+                        "progress": 0,
+                        "message": "automatic code generation queued",
+                    }
+                ],
+            )
+        )
+        append_event(run, "completed", 100, "analysis complete; code generation queued automatically")
+    else:
+        append_event(run, "needs_review", 100, "no implementable architecture graph could be extracted")
     run.status = "completed"
-    append_event(run, "completed", 100, "Architecture IR is ready for user review")
     session.commit()
 
 
@@ -188,11 +268,11 @@ def _custom_modules(spec: ModelGraphSpec, provider: Any) -> dict[str, str]:
     if not rendered.custom_operations:
         return {}
     modules: dict[str, str] = {}
-    for operation in rendered.custom_operations:
-        node = next(item for item in spec.nodes if item.op == operation)
+    for node_id in rendered.custom_operations:
+        node = next(item for item in spec.nodes if item.id == node_id)
         response = synthesize_custom_module(provider, node)
         node.params["class_name"] = response.class_name
-        modules[operation] = response.source
+        modules[node.id] = response.source
     return modules
 
 
@@ -206,7 +286,7 @@ def _request_repair(
     patch = provider.generate_structured(
         RestrictedRepairPatch,
         instructions=(
-            f"Return one minimal {target} repair for the failed approved Architecture IR. "
+            f"Return one minimal {target} repair for the failed approved model structure. "
             "You may only change a node's params or input order, or replace one standalone custom module. "
             "Do not add imports outside torch/typing/math and do not rewrite the project."
         ),
@@ -225,15 +305,17 @@ def _request_repair(
     if node is None:
         raise ValueError(f"repair references unknown node: {patch.node_id}")
     if patch.params is not None:
-        node.params = patch.params
+        node.params = {**node.params, **patch.params}
     if patch.inputs is not None:
         node.inputs = patch.inputs
-    if patch.target == "custom_block":
+    if patch.target in {"custom_block", "glue"} and patch.custom_source:
         if not patch.custom_source or not patch.custom_class_name:
-            raise ValueError("custom-block repair requires source and class name")
+            raise ValueError(f"{patch.target} module repair requires source and class name")
         validate_custom_module(patch.custom_source, patch.custom_class_name)
         node.params["class_name"] = patch.custom_class_name
-        custom_modules[node.op] = patch.custom_source
+        custom_modules[node.id] = patch.custom_source
+    elif patch.target == "custom_block":
+        raise ValueError("custom-block repair requires source and class name")
     ModelGraphSpec.model_validate(spec.model_dump(mode="json"))
     return patch
 
@@ -248,10 +330,10 @@ def process_generation(session: Session, run: AnalysisRun, settings: Settings) -
         raise ValueError("generation dependencies no longer exist")
     spec = ModelGraphSpec.model_validate(spec_record.spec_json)
     if spec_record.status != "approved":
-        raise ValueError("generation requires an approved Architecture IR")
+        raise ValueError("generation requires an approved model structure")
 
     provider = build_provider(settings)
-    append_event(run, "code_generation", 20, "rendering approved Architecture IR")
+    append_event(run, "code_generation", 20, "rendering approved model structure")
     session.commit()
     custom_modules = _custom_modules(spec, provider)
     repair_log: list[dict[str, object]] = []
@@ -312,6 +394,7 @@ def process_generation(session: Session, run: AnalysisRun, settings: Settings) -
     if result.status != "passed":
         generation.status = "needs_review"
         generation.failure_reason = result.message
+        document.status = "needs_review"
         run.status = "completed"
         append_event(run, "needs_review", 100, "sandbox validation failed; no fallback was generated")
         session.commit()
@@ -329,6 +412,7 @@ def process_generation(session: Session, run: AnalysisRun, settings: Settings) -
         )
     )
     generation.status = "completed"
+    document.status = "completed"
     run.status = "completed"
     append_event(run, "completed", 100, "validated model package is ready")
     session.commit()

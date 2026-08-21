@@ -58,6 +58,27 @@ def _recurrent(node: NodeSpec, args: str) -> str:
     return f"self.{node.id}({args})[0]"
 
 
+def _patch_embedding(node: NodeSpec) -> str:
+    params = node.params
+    return (
+        f"PatchEmbedding(in_channels={int(params['in_channels'])}, embed_dim={int(params['embed_dim'])}, "
+        f"patch_size={int(params['patch_size'])}, use_norm={params.get('norm') is not None})"
+    )
+
+
+def _pvt_encoder_sra(node: NodeSpec) -> str:
+    params = node.params
+    depth_value = params.get("num_layers", 1)
+    if isinstance(depth_value, dict):
+        depth_value = depth_value.get("PVT-Small", next(iter(depth_value.values())))
+    return (
+        f"PVTEncoderSRA(channels={int(params['embed_dim'])}, num_heads={int(params['num_heads'])}, "
+        f"depth={int(depth_value)}, sr_ratio={int(params.get('sr_ratio', 1))}, "
+        f"expansion_ratio={int(params.get('ffn_expansion_ratio', 4))}, "
+        f"dropout={float(params.get('dropout', 0.0))})"
+    )
+
+
 REGISTRY: dict[str, ComponentDefinition] = {
     "identity": ComponentDefinition(_module("Identity")),
     "linear": ComponentDefinition(_module("Linear")),
@@ -80,6 +101,8 @@ REGISTRY: dict[str, ComponentDefinition] = {
     "multiheadattention": ComponentDefinition(_module("MultiheadAttention"), _attention),
     "transformerencoderlayer": ComponentDefinition(_module("TransformerEncoderLayer")),
     "transformerdecoderlayer": ComponentDefinition(_module("TransformerDecoderLayer")),
+    "patchembed": ComponentDefinition(_patch_embedding),
+    "transformerencodersra": ComponentDefinition(_pvt_encoder_sra),
     "lstm": ComponentDefinition(_module("LSTM"), _recurrent),
     "gru": ComponentDefinition(_module("GRU"), _recurrent),
     "add": ComponentDefinition(lambda node: "nn.Identity()", _add),

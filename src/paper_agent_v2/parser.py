@@ -6,8 +6,9 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 SECTION_RE = re.compile(
-    r"^(?:\d+(?:\.\d+)*\s+)?(abstract|introduction|related work|method(?:ology)?|"
-    r"model|architecture|approach|experiments?|results?|conclusion|appendix)\b",
+    r"^(?:\d+(?:\.\d+)*\.?\s+)?(abstract|introduction|related work|method(?:ology)?|"
+    r"model|architecture|approach|proposed method|experiments?|results?|discussion|limitations?|"
+    r"conclusion|references|appendix)\b",
     re.IGNORECASE,
 )
 GITHUB_RE = re.compile(r"https?://github\.com/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+")
@@ -85,6 +86,8 @@ def parse_pdf(path: Path, max_bytes: int = 50 * 1024 * 1024) -> ParsedPaper:
                 section_match = SECTION_RE.match(text)
                 if section_match and len(text) < 120:
                     current_section = section_match.group(1).lower()
+                    if current_section == "proposed method":
+                        current_section = "method"
                 caption = CAPTION_RE.match(text)
                 kind = (
                     "table" if caption and text.lower().startswith("table") else "caption" if caption else "paragraph"

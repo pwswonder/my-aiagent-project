@@ -30,7 +30,8 @@ def _safe_slug(value: str) -> str:
 
 
 def _shape_literal(shape: list[int | str]) -> str:
-    values = [2 if isinstance(value, str) else value for value in shape]
+    symbolic_defaults = {"B": 2, "H": 224, "W": 224, "T": 32, "L": 32, "N": 32}
+    values = [symbolic_defaults.get(value, 2) if isinstance(value, str) else value for value in shape]
     return repr(values)
 
 

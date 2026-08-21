@@ -26,13 +26,15 @@ Return only the supplied JSON schema. Every node and training hyperparameter mus
 If evidence is missing, add an assumption with a confidence and an unresolved item when it can affect
 model behavior. Do not replace an unknown architecture with a generic CNN, MLP, or Transformer.
 Use symbolic dimensions such as B, C, H, W, T, D. Node inputs reference input tensor names or earlier
-node outputs. Mark the spec needs_review whenever a blocking choice remains."""
+node outputs. share_with may only reference the id of another node in the returned nodes array; omit it
+unless the paper explicitly shares weights. Mark the spec needs_review whenever a blocking choice remains."""
 
 
 @dataclass(slots=True)
 class AnalysisResult:
     paper: ParsedPaper
     spec: ModelGraphSpec
+    summary: str
     page_analysis: str | None
     official_sources: list[OfficialCodeSource]
 
@@ -43,6 +45,16 @@ def _evidence_payload(paper: ParsedPaper) -> list[dict[str, object]]:
     for query in ARCHITECTURE_QUERIES:
         for hit in retriever.search(query, limit=12):
             selected[hit.chunk.id] = hit.chunk
+    # PDF layout blocks are frequently only headings or split fragments. Pull
+    # their local neighbours into the extraction context so a heading such as
+    # "Proposed Method" includes the actual method paragraphs that follow it.
+    ordered = sorted(paper.chunks, key=lambda item: (item.page, item.id))
+    positions = {chunk.id: index for index, chunk in enumerate(ordered)}
+    for chunk_id in list(selected):
+        position = positions[chunk_id]
+        for neighbour in ordered[max(0, position - 2) : position + 4]:
+            if neighbour.section != "references":
+                selected[neighbour.id] = neighbour
     return [
         {
             "id": chunk.id,
@@ -72,10 +84,13 @@ def analyze_paper(
     provider: LLMProvider,
     *,
     max_bytes: int,
+    title_hint: str | None = None,
     render_dir: Path | None = None,
     source_resolver: GitHubSourceResolver | None = None,
 ) -> AnalysisResult:
     paper = parse_pdf(pdf_path, max_bytes=max_bytes)
+    if title_hint and paper.title.strip().lower() in {"source", "untitled", "document"}:
+        paper.title = title_hint.strip()
     official_sources: list[OfficialCodeSource] = []
     if source_resolver:
         for url in paper.github_urls:
@@ -126,6 +141,49 @@ def analyze_paper(
         )
     except Exception as exc:
         spec = needs_review_spec(paper.title, f"Architecture extraction failed: {exc}")
+    if not spec.nodes and not spec.unresolved:
+        spec.unresolved.append(
+            UnresolvedItem(
+                field="architecture",
+                question=(
+                    "No implementable architecture nodes were extracted. "
+                    "Review the paper evidence and define the model graph."
+                ),
+                blocking=True,
+            )
+        )
+        spec.status = SpecStatus.NEEDS_REVIEW
     if spec.status == SpecStatus.APPROVED:
         spec.status = SpecStatus.DRAFT
-    return AnalysisResult(paper=paper, spec=spec, page_analysis=page_analysis, official_sources=official_sources)
+    summary_sections = ("abstract", "introduction", "method", "experiments", "results", "conclusion")
+    summary_chunks = []
+    for section in summary_sections:
+        summary_chunks.extend(chunk for chunk in paper.chunks if chunk.section == section)
+    if not summary_chunks:
+        summary_chunks = paper.chunks
+    summary_evidence = [
+        {
+            "page": chunk.page,
+            "section": chunk.section,
+            "text": chunk.text,
+        }
+        for chunk in summary_chunks[:24]
+    ]
+    try:
+        summary = provider.generate_text(
+            instructions=(
+                "Summarize the supplied research paper evidence in Korean. Include the research problem, "
+                "proposed method, main contributions, training/evaluation setup, and limitations. "
+                "Do not invent facts that are absent from the evidence."
+            ),
+            prompt=json.dumps({"title": paper.title, "evidence": summary_evidence}, ensure_ascii=False),
+        )
+    except Exception:
+        summary = "\n\n".join(chunk.text for chunk in paper.chunks[:3])[:4_000]
+    return AnalysisResult(
+        paper=paper,
+        spec=spec,
+        summary=summary,
+        page_analysis=page_analysis,
+        official_sources=official_sources,
+    )

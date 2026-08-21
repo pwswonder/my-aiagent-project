@@ -56,7 +56,14 @@ services:
       context: .
       dockerfile: docker/sandbox-runner.Dockerfile
     command: ["uvicorn", "paper_agent_v2.sandbox_runner:app", "--host", "0.0.0.0", "--port", "8090"]
-    env_file: ${ENV_FILE:-.env}
+    environment:
+      STORAGE_ROOT: /app/var/storage
+      SANDBOX_IMAGE: ${SANDBOX_IMAGE:-ai-paper-agent-sandbox:latest}
+      SANDBOX_STORAGE_VOLUME: ${SANDBOX_STORAGE_VOLUME:-ai-paper-agent-storage}
+      SANDBOX_TIMEOUT_SECONDS: ${SANDBOX_TIMEOUT_SECONDS:-120}
+      SANDBOX_MEMORY: ${SANDBOX_MEMORY:-2g}
+      SANDBOX_CPUS: ${SANDBOX_CPUS:-1.0}
+      SANDBOX_PIDS_LIMIT: ${SANDBOX_PIDS_LIMIT:-128}
     volumes:
       - paper_storage:/app/var/storage
       - /var/run/docker.sock:/var/run/docker.sock
@@ -75,6 +82,9 @@ services:
     command: ["streamlit", "run", "v2_app.py", "--server.address", "0.0.0.0"]
     environment:
       PAPER_AGENT_API_URL: http://api:8000
+      HOME: /tmp
+      XDG_CONFIG_HOME: /tmp/.config
+      STREAMLIT_BROWSER_GATHER_USAGE_STATS: "false"
     ports:
       - "8502:8501"
     depends_on:

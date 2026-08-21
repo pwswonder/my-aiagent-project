@@ -37,6 +37,10 @@ class SpecResponse(BaseModel):
     spec: ModelGraphSpec
 
 
+class ApproveSpecRequest(BaseModel):
+    accept_blocking_as_assumptions: bool = False
+
+
 class GenerationAccepted(BaseModel):
     generation_id: str
     run_id: str
@@ -53,6 +57,46 @@ class GenerationResponse(BaseModel):
     failure_reason: str | None
     validation_json: dict[str, Any] | None
     artifact_id: str | None = None
+
+
+class DocumentHistoryItem(BaseModel):
+    id: str
+    filename: str
+    title: str | None
+    status: str
+    created_at: datetime
+    analysis_run_id: str | None = None
+    analysis_status: str | None = None
+    analysis_stage: str | None = None
+    analysis_progress: int = 0
+
+
+class QATurnResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: str
+    question: str
+    answer: str | None
+    answerability: str
+    citations: list[dict[str, Any]]
+    created_at: datetime
+
+
+class DocumentWorkspace(BaseModel):
+    document_id: str
+    filename: str
+    title: str | None
+    status: str
+    created_at: datetime
+    summary: str | None
+    analysis_run: RunResponse | None = None
+    spec: SpecResponse | None = None
+    generation: GenerationResponse | None = None
+    generation_run: RunResponse | None = None
+    qa_history: list[QATurnResponse] = Field(default_factory=list)
+
+
+class ArtifactPreview(BaseModel):
+    files: dict[str, str]
 
 
 class QuestionRequest(BaseModel):
