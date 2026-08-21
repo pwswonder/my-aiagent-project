@@ -1,0 +1,14 @@
+[
+  {"id": "cnn", "family": "CNN", "pdf": "/absolute/path/to/cnn-paper.pdf"},
+  {"id": "vit", "family": "ViT", "pdf": "/absolute/path/to/vit-paper.pdf"},
+  {"id": "encoder-decoder", "family": "encoder-decoder", "pdf": "/absolute/path/to/encoder-decoder-paper.pdf"},
+  {"id": "unet", "family": "UNet", "pdf": "/absolute/path/to/unet-paper.pdf"},
+  {"id": "rnn", "family": "RNN", "pdf": "/absolute/path/to/rnn-paper.pdf"},
+  {"id": "vae", "family": "VAE", "pdf": "/absolute/path/to/vae-paper.pdf"},
+  {"id": "gan", "family": "GAN", "pdf": "/absolute/path/to/gan-paper.pdf"},
+  {"id": "gnn", "family": "GNN", "pdf": "/absolute/path/to/gnn-paper.pdf"},
+  {"id": "time-series", "family": "time-series", "pdf": "/absolute/path/to/time-series-paper.pdf"},
+  {"id": "diffusion", "family": "diffusion", "pdf": "/absolute/path/to/diffusion-paper.pdf"},
+  {"id": "multimodal", "family": "multimodal", "pdf": "/absolute/path/to/multimodal-paper.pdf"},
+  {"id": "novel", "family": "novel-custom-block", "pdf": "/absolute/path/to/novel-paper.pdf"}
+]

@@ -1,23 +1,35 @@
+# Secrets
 .env
-app_test.py# OS / 편집기
-.DS_Store
-*.log
+.env.*
+!.env.example
 
 # Python
 __pycache__/
 *.py[cod]
-*.pyo
-*.pyd
 *.egg-info/
-.env
-# OS / 편집기
-.DS_Store
-*.log
+.pytest_cache/
+.coverage
+.audit-cache/
+.ruff_cache/
+.mypy_cache/
+.venv/
+.uv-cache/
+dist/
+build/
 
-# Python
-__pycache__/
-*.py[cod]
-*.pyo
-*.pyd
-*.egg-info/
-.env
+# Runtime data and generated artifacts
+var/
+.generated/
+uploaded_docs/
+test_result/
+backup/
+*.bak
+*.zip
+test_*.ipynb
+.ipynb_checkpoints/
+
+# Editors / OS
+.DS_Store
+.idea/
+.vscode/
+*.log

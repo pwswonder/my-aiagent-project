@@ -1,0 +1,45 @@
+name: V2 CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  secrets:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - uses: gitleaks/gitleaks-action@v3
+
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+        with:
+          enable-cache: true
+      - name: Install locked dependencies
+        run: uv sync --frozen --extra worker --extra dev
+      - name: Lint
+        run: uv run ruff check src tests scripts/run_v2_benchmark.py
+      - name: Unit tests
+        run: uv run pytest --cov=paper_agent_v2 --cov-report=term-missing
+      - name: Dependency vulnerability audit
+        run: uv run pip-audit
+
+  compose:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Validate Compose
+        env:
+          POSTGRES_PASSWORD: ci-only-password
+        run: cp .env.example .env && docker compose config --quiet
+      - name: Build isolated sandbox image
+        run: docker build -f docker/sandbox.Dockerfile -t ai-paper-agent-sandbox:latest .

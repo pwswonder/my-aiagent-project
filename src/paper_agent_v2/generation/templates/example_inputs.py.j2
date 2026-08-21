@@ -1,0 +1,9 @@
+from __future__ import annotations
+
+import torch
+
+
+def make_example_inputs() -> dict[str, torch.Tensor]:
+    return {
+{% for input in spec.inputs %}        {{ input.name | tojson }}: torch.randn(*{{ input_shapes[loop.index0] }}, dtype=torch.{{ input.dtype }}),
+{% endfor %}    }

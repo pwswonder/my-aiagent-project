@@ -1,4 +1,3 @@
-간단한 코드 구조 설명 및 실행법 작성
 # 🤖 AI Paper Code Generator
 
 **기술논문에서 AI 모델 코드를 자동 생성하는 지능형 Agent 시스템**
@@ -7,6 +6,59 @@
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.100%2B-green.svg)](https://fastapi.tiangolo.com)
 [![Streamlit](https://img.shields.io/badge/Streamlit-1.28%2B-red.svg)](https://streamlit.io)
 [![TensorFlow](https://img.shields.io/badge/TensorFlow-2.13%2B-orange.svg)](https://tensorflow.org)
+
+---
+
+## V2: evidence-grounded PyTorch generation
+
+V1의 TensorFlow/Jinja 경로는 호환 목적으로 유지됩니다. V2는 `/api/v2`와
+`src/paper_agent_v2`에 병행 구축되며 다음 흐름을 사용합니다.
+
+`PDF/official code → cited Architecture IR → user approval → registry/custom block generation → isolated validation`
+
+모델 전체를 Jinja로 렌더링하지 않습니다. Jinja는 `config.py`, 테스트, README 같은 패키지
+골격에만 쓰며, 알 수 없는 구조를 임의의 CNN/MLP로 대체하지 않습니다. 근거 또는 명시적
+assumption이 없는 node와 blocking unresolved item이 있는 spec은 승인할 수 없습니다.
+
+### V2 실행
+
+Python 3.11과 Docker Compose가 필요합니다.
+
+```bash
+cp .env.example .env
+# .env의 POSTGRES_PASSWORD와 선택한 LLM provider 설정을 입력합니다.
+docker build -f docker/sandbox.Dockerfile -t ai-paper-agent-sandbox:latest .
+docker compose up --build
+```
+
+- V2 UI: http://localhost:8502
+- API docs: http://localhost:8000/docs
+- V1 UI/API는 기존 `app.py`, `backend.main:app` 경로로 유지됩니다.
+
+### V2 구조
+
+```text
+src/paper_agent_v2/
+├── api.py, models.py, jobs.py, worker.py  # API, durable job table, workers
+├── parser.py, retrieval.py, analysis.py   # layout-aware PDF, pgvector/FTS RRF, IR extraction
+├── ir.py                                 # typed graph/evidence/assumption contract
+├── providers/                            # OpenAI/Azure OpenAI adapters
+├── generation/                           # deterministic registry + constrained custom blocks
+└── sandbox.py, repair.py                 # isolated checks and bounded repair policy
+```
+
+DB 스키마는 `alembic upgrade head`로만 관리합니다. 운영 파일은 `var/storage`에 보관되며 Git에
+추가되지 않습니다. 과거 `backend/.env`는 삭제만으로 안전해지지 않으므로 [SECURITY.md](SECURITY.md)의
+자격증명 회전 및 history purge 절차를 반드시 수행해야 합니다.
+
+12편 acceptance benchmark는 `benchmarks/manifest.example.json`을 복사해 합법적으로 보유한 PDF의
+절대 경로를 입력한 뒤 실행합니다. 기본 모드는 IR/evidence까지만 측정하며, blocking unresolved가 없는
+spec의 승인·생성까지 자동 측정하려면 명시적으로 `--approve`를 추가합니다.
+
+```bash
+python scripts/run_v2_benchmark.py benchmarks/manifest.local.json
+python scripts/run_v2_benchmark.py benchmarks/manifest.local.json --approve
+```
 
 ---
 
@@ -67,7 +119,7 @@ pip install -r requirements.txt
 ```bash
 # .env 파일 생성
 # .env 파일에 API 키 설정
-OPENAI_API_KEY=your_openai_api_key_here
+OPENAI_API_KEY=
 # 기타 필요한 환경변수들...
 ```
 

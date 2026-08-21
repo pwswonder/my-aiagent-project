@@ -1,0 +1,13 @@
+from example_inputs import make_example_inputs
+from model import PaperModel
+
+
+def test_model_forward_backward() -> None:
+    model = PaperModel()
+    inputs = make_example_inputs()
+    output = model(**inputs)
+    tensors = output if isinstance(output, tuple) else (output,)
+    loss = sum(t.float().mean() for t in tensors if t.is_floating_point())
+    loss.backward()
+    optimizer = __import__("torch").optim.Adam(model.parameters(), lr=1e-4)
+    optimizer.step()

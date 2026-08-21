@@ -17,6 +17,15 @@ app.include_router(document.router, prefix="")
 app.include_router(qa.router, prefix="")
 app.include_router(user.router)
 
+# V2 is additive. V1 routes and its create_all() behavior remain untouched until migration.
+try:
+    from paper_agent_v2.api import router as v2_router
+
+    app.include_router(v2_router)
+except ImportError:
+    # Allows the legacy requirements-only environment to keep serving V1.
+    pass
+
 
 # DB 세션 의존성
 def get_db():

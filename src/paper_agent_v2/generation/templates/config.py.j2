@@ -1,0 +1,10 @@
+from __future__ import annotations
+
+from dataclasses import dataclass
+
+
+@dataclass(frozen=True, slots=True)
+class ModelConfig:
+    name: str = {{ spec.name | tojson }}
+    task: str = {{ spec.task | tojson }}
+    schema_version: str = {{ spec.schema_version | tojson }}

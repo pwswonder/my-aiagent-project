@@ -1,0 +1,21 @@
+# {{ spec.name }}
+
+Task: `{{ spec.task }}` · Architecture IR: `{{ spec.schema_version }}`
+
+This package was generated deterministically from an approved Architecture IR. Model-family
+Jinja templates were not used.
+
+## Architecture and evidence
+
+{% for node in spec.nodes %}- `{{ node.id }}`: {{ node.op }} → `{{ node.output }}`; evidence: {{ node.evidence_ids | join(', ') if node.evidence_ids else 'assumption' }}
+{% endfor %}
+## Assumptions
+
+{% for item in spec.assumptions %}- `{{ item.field }}` = `{{ item.value }}` (confidence {{ item.confidence }}): {{ item.reason }}
+{% else %}- None.
+{% endfor %}
+## Evidence
+
+{% for item in spec.evidence %}- `{{ item.id }}` — {{ item.source_type }}{% if item.page %}, page {{ item.page }}{% endif %}: {{ item.quote }}
+{% else %}- No evidence was recorded.
+{% endfor %}

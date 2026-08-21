@@ -1,30 +1,86 @@
-version: '3.8'
-
 services:
   postgres:
-    image: postgres:14
-    container_name: aiagent_postgres
-    restart: always
+    image: pgvector/pgvector:pg16
     environment:
-      POSTGRES_USER: ai_user
-      POSTGRES_PASSWORD: ai_pass
-      POSTGRES_DB: aiagent_db
-    ports:
-      - "5432:5432"
+      POSTGRES_USER: ${POSTGRES_USER:-paper_agent}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: ${POSTGRES_DB:-paper_agent}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
     volumes:
       - postgres_data:/var/lib/postgresql/data
 
-  pgadmin:
-    image: dpage/pgadmin4
-    container_name: aiagent_pgadmin
-    restart: always
-    environment:
-      PGADMIN_DEFAULT_EMAIL: admin@admin.com
-      PGADMIN_DEFAULT_PASSWORD: admin123
-    ports:
-      - "5050:80"
+  migrate:
+    build:
+      context: .
+      dockerfile: docker/api.Dockerfile
+    command: ["alembic", "upgrade", "head"]
+    env_file: ${ENV_FILE:-.env}
     depends_on:
-      - postgres
+      postgres:
+        condition: service_healthy
+
+  api:
+    build:
+      context: .
+      dockerfile: docker/api.Dockerfile
+    command: ["uvicorn", "paper_agent_v2.api:app", "--host", "0.0.0.0", "--port", "8000"]
+    env_file: ${ENV_FILE:-.env}
+    ports:
+      - "8000:8000"
+    volumes:
+      - paper_storage:/app/var/storage
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+
+  worker:
+    build:
+      context: .
+      dockerfile: docker/worker.Dockerfile
+    command: ["paper-agent-worker"]
+    env_file: ${ENV_FILE:-.env}
+    volumes:
+      - paper_storage:/app/var/storage
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      sandbox-runner:
+        condition: service_healthy
+
+  sandbox-runner:
+    build:
+      context: .
+      dockerfile: docker/sandbox-runner.Dockerfile
+    command: ["uvicorn", "paper_agent_v2.sandbox_runner:app", "--host", "0.0.0.0", "--port", "8090"]
+    env_file: ${ENV_FILE:-.env}
+    volumes:
+      - paper_storage:/app/var/storage
+      - /var/run/docker.sock:/var/run/docker.sock
+    expose:
+      - "8090"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8090/health')"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  ui:
+    build:
+      context: .
+      dockerfile: docker/api.Dockerfile
+    command: ["streamlit", "run", "v2_app.py", "--server.address", "0.0.0.0"]
+    environment:
+      PAPER_AGENT_API_URL: http://api:8000
+    ports:
+      - "8502:8501"
+    depends_on:
+      - api
 
 volumes:
   postgres_data:
+  paper_storage:
+    name: ai-paper-agent-storage
