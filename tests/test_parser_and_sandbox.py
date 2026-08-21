@@ -2,6 +2,7 @@ from pathlib import Path
 
 import pytest
 
+from paper_agent_v2.analysis import _needs_visual_analysis
 from paper_agent_v2.parser import SECTION_RE, PdfValidationError, validate_pdf
 from paper_agent_v2.sandbox import DockerSandbox, FailureCategory
 
@@ -28,6 +29,19 @@ def test_non_pdf_and_oversized_uploads_are_rejected(tmp_path: Path) -> None:
     path.write_bytes(b"%PDF-" + b"x" * 100)
     with pytest.raises(PdfValidationError, match="exceeds"):
         validate_pdf(path, 20)
+
+
+def test_visual_analysis_is_adaptive_to_text_evidence_density() -> None:
+    sparse = [{"text": "Figure 1. Proposed model."}]
+    rich_text = (
+        "The architecture uses a transformer encoder layer with attention. "
+        "The input patch dimension and hidden output dimension are specified. "
+        "Training minimizes reconstruction loss with patch stride eight. "
+    ) * 30
+    rich = [{"text": rich_text[index : index + 400]} for index in range(0, len(rich_text), 400)]
+
+    assert _needs_visual_analysis(sparse)
+    assert not _needs_visual_analysis(rich)
 
 
 def test_missing_model_is_a_structured_sandbox_failure(tmp_path: Path) -> None:

@@ -46,6 +46,8 @@ class OpenAIProvider:
                 api_key=self.settings.azure_openai_api_key,
                 azure_endpoint=str(self.settings.azure_openai_endpoint),
                 api_version=self.settings.azure_openai_api_version,
+                timeout=self.settings.llm_timeout_seconds,
+                max_retries=1,
             )
             embedding_model = self.settings.azure_openai_embedding_deployment or self.settings.embedding_model
             return client, str(self.settings.azure_openai_deployment), embedding_model
@@ -53,7 +55,11 @@ class OpenAIProvider:
         if not self.settings.openai_api_key:
             raise ProviderConfigurationError("OPENAI_API_KEY is required when LLM_PROVIDER=openai")
         return (
-            OpenAI(api_key=self.settings.openai_api_key),
+            OpenAI(
+                api_key=self.settings.openai_api_key,
+                timeout=self.settings.llm_timeout_seconds,
+                max_retries=1,
+            ),
             self.settings.openai_model,
             self.settings.embedding_model,
         )

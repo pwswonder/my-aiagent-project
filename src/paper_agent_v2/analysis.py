@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -27,7 +28,14 @@ If evidence is missing, add an assumption with a confidence and an unresolved it
 model behavior. Do not replace an unknown architecture with a generic CNN, MLP, or Transformer.
 Use symbolic dimensions such as B, C, H, W, T, D. Node inputs reference input tensor names or earlier
 node outputs. share_with may only reference the id of another node in the returned nodes array; omit it
-unless the paper explicitly shares weights. Mark the spec needs_review whenever a blocking choice remains."""
+unless the paper explicitly shares weights. Mark the spec needs_review whenever a blocking choice remains.
+Use canonical atomic op names whenever they fit: repeat_pad_last_observation, sliding_window_patchify,
+linear, add_fixed_positional_encoding, transformer_encoder, per_channel_linear, squared_error_reduce,
+conv1d, conv2d, layernorm, batchnorm1d, relu, gelu, dropout, reshape, permute, add, concat, identity.
+Do not invent synonyms or combine multiple canonical operations into one node. For patch reconstruction,
+emit padding, patchification, projection, positional encoding, encoder, reconstruction head, and error
+reduction as separate nodes. Put in_features/out_features on linear nodes and use model_dim, num_heads,
+ff_dim, layers on transformer_encoder nodes."""
 
 
 @dataclass(slots=True)
@@ -67,6 +75,36 @@ def _evidence_payload(paper: ParsedPaper) -> list[dict[str, object]]:
     ]
 
 
+def _needs_visual_analysis(evidence: list[dict[str, object]]) -> bool:
+    """Use the slower vision pass only when extracted text is genuinely sparse.
+
+    Most born-digital papers already expose architecture equations, captions,
+    and implementation details as text. Sending all candidate pages as
+    high-detail images in that case adds a full sequential model call without
+    adding useful evidence. Scanned or figure-heavy papers still take the
+    multimodal path.
+    """
+    text = " ".join(str(item.get("text", "")) for item in evidence).lower()
+    architecture_terms = (
+        "architecture",
+        "encoder",
+        "decoder",
+        "transformer",
+        "layer",
+        "input",
+        "output",
+        "loss",
+        "dimension",
+        "hidden",
+        "stride",
+        "kernel",
+        "patch",
+        "attention",
+    )
+    matched_terms = sum(term in text for term in architecture_terms)
+    return len(evidence) < 10 or len(text) < 3_500 or matched_terms < 5
+
+
 def needs_review_spec(title: str, reason: str) -> ModelGraphSpec:
     return ModelGraphSpec(
         name=title,
@@ -77,6 +115,30 @@ def needs_review_spec(title: str, reason: str) -> ModelGraphSpec:
         outputs=[TensorSpec(name="input", shape=["B", "..."])],
         unresolved=[UnresolvedItem(field="architecture", question=reason, blocking=True)],
     )
+
+
+def _summarize_paper(paper: ParsedPaper, provider: LLMProvider) -> str:
+    summary_sections = ("abstract", "introduction", "method", "experiments", "results", "conclusion")
+    summary_chunks = []
+    for section in summary_sections:
+        summary_chunks.extend(chunk for chunk in paper.chunks if chunk.section == section)
+    if not summary_chunks:
+        summary_chunks = paper.chunks
+    summary_evidence = [
+        {"page": chunk.page, "section": chunk.section, "text": chunk.text}
+        for chunk in summary_chunks[:24]
+    ]
+    try:
+        return provider.generate_text(
+            instructions=(
+                "Summarize the supplied research paper evidence in Korean. Include the research problem, "
+                "proposed method, main contributions, training/evaluation setup, and limitations. "
+                "Do not invent facts that are absent from the evidence."
+            ),
+            prompt=json.dumps({"title": paper.title, "evidence": summary_evidence}, ensure_ascii=False),
+        )
+    except Exception:
+        return "\n\n".join(chunk.text for chunk in paper.chunks[:3])[:4_000]
 
 
 def analyze_paper(
@@ -100,8 +162,14 @@ def analyze_paper(
                 source = None
             if source and source.verified:
                 official_sources.append(source)
+    # Summary generation does not depend on visual or architecture analysis.
+    # Run it concurrently so the upload path pays for the slower branch, not
+    # the sum of two independent LLM calls.
+    summary_executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="paper-summary")
+    summary_future = summary_executor.submit(_summarize_paper, paper, provider)
+    evidence = _evidence_payload(paper)
     page_analysis = None
-    if render_dir and paper.architecture_pages:
+    if render_dir and paper.architecture_pages and _needs_visual_analysis(evidence):
         images = render_pages(pdf_path, paper.architecture_pages, render_dir)
         if images:
             page_analysis = provider.analyze_images(
@@ -113,7 +181,6 @@ def analyze_paper(
                 prompt=f"Paper title: {paper.title}. Extract implementation-relevant visual evidence.",
             )
 
-    evidence = _evidence_payload(paper)
     prompt = json.dumps(
         {
             "title": paper.title,
@@ -155,31 +222,10 @@ def analyze_paper(
         spec.status = SpecStatus.NEEDS_REVIEW
     if spec.status == SpecStatus.APPROVED:
         spec.status = SpecStatus.DRAFT
-    summary_sections = ("abstract", "introduction", "method", "experiments", "results", "conclusion")
-    summary_chunks = []
-    for section in summary_sections:
-        summary_chunks.extend(chunk for chunk in paper.chunks if chunk.section == section)
-    if not summary_chunks:
-        summary_chunks = paper.chunks
-    summary_evidence = [
-        {
-            "page": chunk.page,
-            "section": chunk.section,
-            "text": chunk.text,
-        }
-        for chunk in summary_chunks[:24]
-    ]
     try:
-        summary = provider.generate_text(
-            instructions=(
-                "Summarize the supplied research paper evidence in Korean. Include the research problem, "
-                "proposed method, main contributions, training/evaluation setup, and limitations. "
-                "Do not invent facts that are absent from the evidence."
-            ),
-            prompt=json.dumps({"title": paper.title, "evidence": summary_evidence}, ensure_ascii=False),
-        )
-    except Exception:
-        summary = "\n\n".join(chunk.text for chunk in paper.chunks[:3])[:4_000]
+        summary = summary_future.result()
+    finally:
+        summary_executor.shutdown(wait=True)
     return AnalysisResult(
         paper=paper,
         spec=spec,

@@ -39,6 +39,14 @@ class CustomModuleResponse(BaseModel):
     assumptions: list[str] = Field(default_factory=list)
 
 
+class CustomModuleBatchItem(CustomModuleResponse):
+    node_id: str
+
+
+class CustomModuleBatchResponse(BaseModel):
+    modules: list[CustomModuleBatchItem]
+
+
 def validate_custom_module(source: str, class_name: str) -> None:
     if len(source) > 20_000:
         raise ValueError("custom module source is too large")
@@ -98,3 +106,58 @@ def synthesize_custom_module(provider: LLMProvider, node: NodeSpec) -> CustomMod
             continue
         return response
     raise ValueError(f"custom module generation failed validation after 3 attempts: {validation_error}")
+
+
+def synthesize_custom_modules(
+    provider: LLMProvider, nodes: list[NodeSpec]
+) -> dict[str, CustomModuleResponse]:
+    """Generate all novel blocks in one bounded request instead of N serial calls."""
+    pending = {node.id: node for node in nodes}
+    generated: dict[str, CustomModuleResponse] = {}
+    validation_errors: dict[str, str] = {}
+    instructions = (
+        "Generate one independent, self-contained torch.nn.Module for every supplied node contract. "
+        "Return each requested node_id exactly once. The class_name must match the single class in source. "
+        "Imports are limited to torch, typing and math. Do not perform file, network, process, environment, "
+        "reflection or dynamic-code operations. Preserve tensor shape semantics."
+    )
+    for _ in range(3):
+        contracts = [
+            {
+                "node_id": node.id,
+                "operation": node.op,
+                "inputs": node.inputs,
+                "output": node.output,
+                "parameters": node.params,
+                "previous_validation_error": validation_errors.get(node.id),
+            }
+            for node in pending.values()
+        ]
+        response = provider.generate_structured(
+            CustomModuleBatchResponse,
+            instructions=instructions,
+            prompt=str(contracts),
+        )
+        returned_ids: set[str] = set()
+        for item in response.modules:
+            if item.node_id not in pending or item.node_id in returned_ids:
+                continue
+            returned_ids.add(item.node_id)
+            item.source = re.sub(r"^```(?:python)?\s*|\s*```$", "", item.source.strip())
+            try:
+                validate_custom_module(item.source, item.class_name)
+            except (SyntaxError, ValueError) as exc:
+                validation_errors[item.node_id] = str(exc)
+                continue
+            generated[item.node_id] = CustomModuleResponse(
+                class_name=item.class_name,
+                source=item.source,
+                assumptions=item.assumptions,
+            )
+        pending = {node_id: node for node_id, node in pending.items() if node_id not in generated}
+        for node_id in pending:
+            validation_errors.setdefault(node_id, "module was missing from the batch response")
+        if not pending:
+            return generated
+    details = "; ".join(f"{node_id}: {error}" for node_id, error in validation_errors.items())
+    raise ValueError(f"custom module batch generation failed after 3 attempts: {details}")

@@ -23,6 +23,132 @@ def _module(name: str) -> Callable[[NodeSpec], str]:
     return build
 
 
+SYMBOLIC_INT_DEFAULTS = {
+    "P_len": 8,
+    "Plen": 8,
+    "S": 6,
+    "D_model": 32,
+    "Dmodel": 32,
+    "n_heads": 4,
+    "n_layers": 2,
+    "d_ff": 64,
+    "M": 4,
+}
+
+
+def _int_value(value: Any, default: int) -> int:
+    if isinstance(value, bool):
+        return int(value)
+    if isinstance(value, int):
+        return value
+    if isinstance(value, float):
+        return int(value)
+    if isinstance(value, str):
+        try:
+            return int(value)
+        except ValueError:
+            return SYMBOLIC_INT_DEFAULTS.get(value, default)
+    return default
+
+
+def _float_value(value: Any, default: float) -> float:
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        return float(value)
+    return default
+
+
+def _linear(node: NodeSpec) -> str:
+    params = node.params
+    weight_shape = params.get("weight_shape", [])
+    if isinstance(weight_shape, list) and len(weight_shape) >= 2:
+        in_features = weight_shape[-2]
+        out_features = weight_shape[-1]
+    else:
+        in_features = params.get("in_features")
+        out_features = params.get("out_features")
+    bias = params.get("bias", True)
+    if not isinstance(bias, bool):
+        bias = True
+    return (
+        f"nn.Linear(in_features={_int_value(in_features, 8)}, "
+        f"out_features={_int_value(out_features, 32)}, bias={bias})"
+    )
+
+
+def _repeat_pad(node: NodeSpec) -> str:
+    return f"RepeatPadLastObservation(pad_steps={_int_value(node.params.get('pad_steps'), 4)})"
+
+
+def _patchify(node: NodeSpec) -> str:
+    patch_length = node.params.get("patch_length", node.params.get("patch_len"))
+    return (
+        f"SlidingWindowPatchify(patch_length={_int_value(patch_length, 8)}, "
+        f"stride={_int_value(node.params.get('stride'), 4)})"
+    )
+
+
+def _pad_and_extract_patches(node: NodeSpec) -> str:
+    params = node.params
+    patch_length = _int_value(params.get("patch_len", params.get("patch_length")), 8)
+    stride = _int_value(params.get("stride"), 6)
+    return (
+        "nn.Sequential("
+        f"RepeatPadLastObservation(pad_steps={stride}), "
+        f"SlidingWindowPatchify(patch_length={patch_length}, stride={stride})"
+        ")"
+    )
+
+
+def _fixed_position(node: NodeSpec) -> str:
+    encoding_shape = node.params.get("encoding_shape", node.params.get("shape", []))
+    model_dim = encoding_shape[-1] if isinstance(encoding_shape, list) and encoding_shape else None
+    return f"FixedPositionalEncoding(model_dim={_int_value(model_dim, 32)})"
+
+
+def _linear_add_fixed_position(node: NodeSpec) -> str:
+    projection_shape = node.params.get("w_proj_shape", ["Plen", "Dmodel"])
+    if not isinstance(projection_shape, list) or len(projection_shape) < 2:
+        projection_shape = ["Plen", "Dmodel"]
+    in_features = _int_value(projection_shape[-2], 8)
+    out_features = _int_value(node.params.get("d_model", projection_shape[-1]), 32)
+    return (
+        "nn.Sequential("
+        f"nn.Linear(in_features={in_features}, out_features={out_features}, bias=False), "
+        f"FixedPositionalEncoding(model_dim={out_features})"
+        ")"
+    )
+
+
+def _time_series_transformer(node: NodeSpec) -> str:
+    params = node.params
+    dropout = 0.1 if params.get("dropout") == "present" else _float_value(params.get("dropout"), 0.0)
+    return (
+        f"TimeSeriesTransformerEncoder(model_dim={_int_value(params.get('model_dim', params.get('d_model')), 32)}, "
+        f"num_heads={_int_value(params.get('num_heads', params.get('n_heads')), 4)}, "
+        f"ff_dim={_int_value(params.get('ff_dim', params.get('d_ff')), 64)}, "
+        f"layers={_int_value(params.get('layers', params.get('num_layers', params.get('n_layers'))), 2)}, "
+        f"dropout={dropout})"
+    )
+
+
+def _per_channel_linear(node: NodeSpec) -> str:
+    params = node.params
+    return (
+        f"PerChannelLinear(in_features={_int_value(params.get('in_features'), 32)}, "
+        f"out_features={_int_value(params.get('out_features'), 8)}, "
+        f"channels={_int_value(params.get('channels'), 4)})"
+    )
+
+
+def _linear_patch_reconstruction(node: NodeSpec) -> str:
+    output_shape = node.params.get("output_shape", [])
+    out_features = output_shape[-1] if isinstance(output_shape, list) and output_shape else "Plen"
+    out_features = _int_value(out_features, 8)
+    if "in_features" not in node.params:
+        return f"nn.LazyLinear(out_features={out_features})"
+    return f"nn.Linear(in_features={_int_value(node.params['in_features'], 32)}, out_features={out_features})"
+
+
 @dataclass(frozen=True, slots=True)
 class ComponentDefinition:
     constructor: Callable[[NodeSpec], str]
@@ -35,7 +161,30 @@ def _concat(node: NodeSpec, args: str) -> str:
 
 
 def _add(node: NodeSpec, args: str) -> str:
+    if node.params.get("positional_encoding") == "fixed":
+        return f"self.{node.id}({args})"
     return " + ".join(item.strip() for item in args.split(","))
+
+
+def _add_constructor(node: NodeSpec) -> str:
+    if node.params.get("positional_encoding") == "fixed":
+        shape = node.params.get("shape", [])
+        model_dim = shape[-1] if isinstance(shape, list) and shape else "Dmodel"
+        return f"FixedPositionalEncoding(model_dim={_int_value(model_dim, 32)})"
+    return "nn.Identity()"
+
+
+def _reduce_sum_constructor(node: NodeSpec) -> str:
+    metric = str(node.params.get("metric", "")).lower()
+    return "WindowReconstructionError()" if "reconstruction" in metric else "nn.Identity()"
+
+
+def _reduce_sum(node: NodeSpec, args: str) -> str:
+    metric = str(node.params.get("metric", "")).lower()
+    if "reconstruction" in metric:
+        return f"self.{node.id}({args})"
+    dimensions = node.params.get("dim")
+    return f"torch.sum({args}, dim={dimensions!r})" if dimensions is not None else f"torch.sum({args})"
 
 
 def _reshape(node: NodeSpec, args: str) -> str:
@@ -81,7 +230,7 @@ def _pvt_encoder_sra(node: NodeSpec) -> str:
 
 REGISTRY: dict[str, ComponentDefinition] = {
     "identity": ComponentDefinition(_module("Identity")),
-    "linear": ComponentDefinition(_module("Linear")),
+    "linear": ComponentDefinition(_linear),
     "conv1d": ComponentDefinition(_module("Conv1d")),
     "conv2d": ComponentDefinition(_module("Conv2d")),
     "conv3d": ComponentDefinition(_module("Conv3d")),
@@ -105,7 +254,7 @@ REGISTRY: dict[str, ComponentDefinition] = {
     "transformerencodersra": ComponentDefinition(_pvt_encoder_sra),
     "lstm": ComponentDefinition(_module("LSTM"), _recurrent),
     "gru": ComponentDefinition(_module("GRU"), _recurrent),
-    "add": ComponentDefinition(lambda node: "nn.Identity()", _add),
+    "add": ComponentDefinition(_add_constructor, _add),
     "residual": ComponentDefinition(lambda node: "nn.Identity()", _add),
     "skipconnection": ComponentDefinition(lambda node: "nn.Identity()", _add),
     "concat": ComponentDefinition(lambda node: "nn.Identity()", _concat),
@@ -132,6 +281,27 @@ REGISTRY: dict[str, ComponentDefinition] = {
             f"MultimodalFusion(input_dim={int(node.params['input_dim'])}, output_dim={int(node.params['output_dim'])})"
         )
     ),
+    "repeatpadlastobservation": ComponentDefinition(_repeat_pad),
+    "repeatpadlaststep": ComponentDefinition(_repeat_pad),
+    "repeatlaststep": ComponentDefinition(_repeat_pad),
+    "slidingwindowpatchify": ComponentDefinition(_patchify),
+    "padandextractpatches": ComponentDefinition(_pad_and_extract_patches),
+    "patchifyovertime": ComponentDefinition(_pad_and_extract_patches),
+    "patching": ComponentDefinition(_pad_and_extract_patches),
+    "addfixedpositionalencoding": ComponentDefinition(_fixed_position),
+    "addpositionalencoding": ComponentDefinition(_fixed_position),
+    "linearaddfixedpositionalencoding": ComponentDefinition(_linear_add_fixed_position),
+    "linearaddpositionalencoding": ComponentDefinition(_linear_add_fixed_position),
+    "transformerencoder": ComponentDefinition(_time_series_transformer),
+    "transformerencoderstack": ComponentDefinition(_time_series_transformer),
+    "perchannellinear": ComponentDefinition(_per_channel_linear),
+    "permodalitylinear": ComponentDefinition(_per_channel_linear),
+    "linearpatchreconstruction": ComponentDefinition(_linear_patch_reconstruction),
+    "patchreconstructionprojection": ComponentDefinition(_linear_patch_reconstruction),
+    "slicelastpatchpair": ComponentDefinition(lambda node: "LastPatchPair()"),
+    "squarederrorreduce": ComponentDefinition(lambda node: "SquaredErrorReduce()"),
+    "l2patchwiseerror": ComponentDefinition(lambda node: "PatchwiseL2Error()"),
+    "reducesum": ComponentDefinition(_reduce_sum_constructor, _reduce_sum),
 }
 
 

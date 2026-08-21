@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+import shutil
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -30,7 +31,16 @@ def _safe_slug(value: str) -> str:
 
 
 def _shape_literal(shape: list[int | str]) -> str:
-    symbolic_defaults = {"B": 2, "H": 224, "W": 224, "T": 32, "L": 32, "N": 32}
+    symbolic_defaults = {
+        "B": 2,
+        "H": 224,
+        "W": 224,
+        "T": 32,
+        "L": 32,
+        "N": 32,
+        "M": 4,
+        "W_plus_1": 33,
+    }
     values = [symbolic_defaults.get(value, 2) if isinstance(value, str) else value for value in shape]
     return repr(values)
 
@@ -59,6 +69,8 @@ def write_package(
     package_path = (destination_root.resolve() / f"{_safe_slug(spec.name)}-{artifact_key}").resolve()
     if destination_root.resolve() not in package_path.parents:
         raise ValueError("artifact path escaped its storage root")
+    if package_path.exists():
+        shutil.rmtree(package_path)
     package_path.mkdir(parents=True, exist_ok=False)
     (package_path / "tests").mkdir()
 

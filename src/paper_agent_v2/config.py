@@ -28,6 +28,7 @@ class Settings(BaseSettings):
     azure_openai_api_version: str = "2025-04-01-preview"
     embedding_model: str = "text-embedding-3-small"
     github_token: str | None = None
+    llm_timeout_seconds: float = Field(default=90.0, ge=10.0, le=300.0)
 
     sandbox_image: str = "ai-paper-agent-sandbox:latest"
     sandbox_runner_url: str | None = None

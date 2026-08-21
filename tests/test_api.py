@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from types import SimpleNamespace
 
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, event, select
@@ -10,9 +11,14 @@ from sqlalchemy.pool import StaticPool
 from paper_agent_v2 import api
 from paper_agent_v2.config import Settings
 from paper_agent_v2.db import Base, get_session
-from paper_agent_v2.ir import ModelGraphSpec, NodeSpec, TensorSpec, UnresolvedItem
-from paper_agent_v2.jobs import _auto_approve, preserve_previous_spec_after_failed_refresh
-from paper_agent_v2.models import AnalysisRun, Document
+from paper_agent_v2.ir import EvidenceRef, EvidenceSource, ModelGraphSpec, NodeSpec, TensorSpec, UnresolvedItem
+from paper_agent_v2.jobs import (
+    _auto_approve,
+    _delete_search_material,
+    _record_chunks,
+    preserve_previous_spec_after_failed_refresh,
+)
+from paper_agent_v2.models import AnalysisRun, Chunk, Document, Evidence
 from paper_agent_v2.parser import PaperChunk
 from paper_agent_v2.retrieval import RetrievalHit
 
@@ -178,6 +184,116 @@ def test_automatic_flow_records_assumptions_and_approves() -> None:
     assert spec.assumptions[0].field == "projection.bias"
 
 
+def test_automatic_flow_makes_an_implicit_output_batch_axis_explicit() -> None:
+    spec = ModelGraphSpec(
+        name="Batched reconstruction",
+        task="reconstruction",
+        inputs=[TensorSpec(name="x", shape=["B", "M", "T"])],
+        nodes=[NodeSpec(id="identity", op="Identity", inputs=["x"], output="y", evidence_ids=["e1"])],
+        outputs=[TensorSpec(name="y", shape=["M", "T"])],
+        evidence=[
+            {"id": "e1", "source_type": "pdf", "quote": "The output has shape M by T.", "page": 1}
+        ],
+    )
+
+    _auto_approve(spec)
+
+    assert spec.outputs[0].shape == ["B", "M", "T"]
+    assert any(item.field == "outputs.y.shape" for item in spec.assumptions)
+
+
+def test_official_code_file_locator_is_not_stored_as_pdf_chunk_foreign_key() -> None:
+    engine = create_engine("sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool)
+
+    @event.listens_for(engine, "connect")
+    def enable_foreign_keys(dbapi_connection, _connection_record) -> None:
+        dbapi_connection.execute("PRAGMA foreign_keys=ON")
+
+    Base.metadata.create_all(engine)
+    paper_chunk = PaperChunk("paper-method", 2, "method", "paragraph", "A patch transformer is used.")
+    result = SimpleNamespace(
+        paper=SimpleNamespace(chunks=[paper_chunk]),
+        spec=SimpleNamespace(
+            evidence=[
+                EvidenceRef(
+                    id="paper-method",
+                    source_type=EvidenceSource.PDF,
+                    quote=paper_chunk.text,
+                    page=2,
+                    chunk_id=paper_chunk.id,
+                ),
+                EvidenceRef(
+                    id="config.py",
+                    source_type=EvidenceSource.OFFICIAL_CODE,
+                    quote="d_model: int",
+                    url="https://github.com/example/repo",
+                    commit_sha="abc123",
+                    chunk_id="config.py",
+                ),
+            ]
+        ),
+    )
+    provider = SimpleNamespace(embed=lambda texts: [None for _ in texts])
+
+    with Session(engine) as session:
+        document = Document(filename="paper.pdf", storage_path="paper.pdf")
+        session.add(document)
+        session.flush()
+        _record_chunks(session, document, result, provider)
+        session.commit()
+
+        evidence_rows = session.scalars(select(Evidence).order_by(Evidence.source_type)).all()
+        code_evidence = next(row for row in evidence_rows if row.source_type == "official_code")
+        pdf_evidence = next(row for row in evidence_rows if row.source_type == "pdf")
+        assert pdf_evidence is not None and pdf_evidence.chunk_id is not None
+        assert pdf_evidence.chunk_id.startswith(f"{document.id}:")
+        assert code_evidence is not None and code_evidence.chunk_id is None
+
+
+def test_duplicate_pdf_uploads_use_document_scoped_chunk_ids_and_can_be_reanalyzed() -> None:
+    engine = create_engine("sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool)
+
+    @event.listens_for(engine, "connect")
+    def enable_foreign_keys(dbapi_connection, _connection_record) -> None:
+        dbapi_connection.execute("PRAGMA foreign_keys=ON")
+
+    Base.metadata.create_all(engine)
+    paper_chunk = PaperChunk("same-parser-id", 1, "method", "paragraph", "Shared PDF text")
+    result = SimpleNamespace(
+        paper=SimpleNamespace(chunks=[paper_chunk]),
+        spec=SimpleNamespace(
+            evidence=[
+                EvidenceRef(
+                    id="same-evidence-id",
+                    source_type=EvidenceSource.PDF,
+                    quote=paper_chunk.text,
+                    page=1,
+                    chunk_id=paper_chunk.id,
+                )
+            ]
+        ),
+    )
+    provider = SimpleNamespace(embed=lambda texts: [None for _ in texts])
+
+    with Session(engine) as session:
+        first = Document(filename="paper.pdf", storage_path="one.pdf")
+        second = Document(filename="paper.pdf", storage_path="two.pdf")
+        session.add_all([first, second])
+        session.flush()
+        _record_chunks(session, first, result, provider)
+        _record_chunks(session, second, result, provider)
+        session.commit()
+
+        chunks = session.scalars(select(Chunk).order_by(Chunk.id)).all()
+        assert len(chunks) == 2
+        assert {chunk.document_id for chunk in chunks} == {first.id, second.id}
+
+        _delete_search_material(session, first.id)
+        session.commit()
+        assert session.scalar(select(Chunk).where(Chunk.document_id == first.id)) is None
+        assert session.scalar(select(Chunk).where(Chunk.document_id == second.id)) is not None
+
+
 def test_generation_preview_returns_latest_attempt_source(tmp_path: Path, monkeypatch) -> None:
     settings = Settings(storage_root=tmp_path / "storage")
     settings.ensure_directories()
@@ -276,16 +392,23 @@ def test_upload_returns_durable_run_and_uses_uuid_storage(tmp_path: Path, monkey
     assert workspace_response.json()["qa_history"] == []
     reanalysis_response = client.post(f"/api/v2/documents/{payload['document_id']}/reanalyze")
     assert reanalysis_response.status_code == 202
-    assert reanalysis_response.json()["analysis_run_id"] != payload["analysis_run_id"]
+    reanalysis_run_id = reanalysis_response.json()["analysis_run_id"]
+    assert reanalysis_run_id != payload["analysis_run_id"]
+    with Session(engine) as session:
+        superseded = session.get(AnalysisRun, payload["analysis_run_id"])
+        assert superseded is not None
+        assert superseded.status == "superseded"
     delete_response = client.delete(f"/api/v2/documents/{payload['document_id']}")
     assert delete_response.status_code == 204
     assert client.get("/api/v2/documents").json() == []
     with Session(engine) as session:
         document = session.get(Document, payload["document_id"])
         run = session.get(AnalysisRun, payload["analysis_run_id"])
-        assert document is not None and run is not None
+        reanalysis_run = session.get(AnalysisRun, reanalysis_run_id)
+        assert document is not None and run is not None and reanalysis_run is not None
         assert document.status == "cancelled"
-        assert run.status == "cancelled"
+        assert run.status == "superseded"
+        assert reanalysis_run.status == "cancelled"
         assert Path(document.storage_path).name == "source.pdf"
         assert Path(document.storage_path).parent.name == document.id
         assert session.scalar(select(Document).where(Document.id == document.id)) is not None

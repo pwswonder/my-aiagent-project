@@ -6,15 +6,15 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
-from sqlalchemy import delete, select, update
+from sqlalchemy import delete, or_, select, update
 from sqlalchemy.orm import Session
 
 from paper_agent_v2.analysis import analyze_paper
 from paper_agent_v2.config import Settings, get_settings
-from paper_agent_v2.generation.custom import synthesize_custom_module, validate_custom_module
+from paper_agent_v2.generation.custom import synthesize_custom_modules, validate_custom_module
 from paper_agent_v2.generation.package_writer import write_package
 from paper_agent_v2.generation.renderer import render_model
-from paper_agent_v2.ir import Assumption, ModelGraphSpec, SpecStatus, UnresolvedItem
+from paper_agent_v2.ir import Assumption, EvidenceSource, ModelGraphSpec, SpecStatus, UnresolvedItem
 from paper_agent_v2.models import (
     AnalysisRun,
     ArchitectureSpecRecord,
@@ -100,6 +100,11 @@ def recover_stale_runs(session: Session, age: timedelta = timedelta(minutes=5)) 
 
 def _record_chunks(session: Session, document: Document, result: Any, provider: Any) -> None:
     texts = [chunk.text for chunk in result.paper.chunks]
+    chunk_ids = {chunk.id for chunk in result.paper.chunks}
+    persisted_chunk_ids = {
+        chunk_id: f"{document.id}:{hashlib.sha256(chunk_id.encode('utf-8')).hexdigest()[:32]}"
+        for chunk_id in chunk_ids
+    }
     try:
         embeddings = provider.embed(texts)
     except Exception:
@@ -107,7 +112,10 @@ def _record_chunks(session: Session, document: Document, result: Any, provider: 
     for index, chunk in enumerate(result.paper.chunks):
         session.merge(
             Chunk(
-                id=chunk.id,
+                # Parser ids are deterministic for the page/text. Namespace
+                # them per upload so the same PDF can safely be uploaded more
+                # than once without moving another document's chunk rows.
+                id=persisted_chunk_ids[chunk.id],
                 document_id=document.id,
                 page=chunk.page,
                 section=chunk.section,
@@ -120,7 +128,7 @@ def _record_chunks(session: Session, document: Document, result: Any, provider: 
     for item in result.spec.evidence:
         session.merge(
             Evidence(
-                id=item.id,
+                id=f"{document.id}:{hashlib.sha256(item.id.encode('utf-8')).hexdigest()[:32]}",
                 document_id=document.id,
                 source_type=item.source_type.value,
                 quote=item.quote,
@@ -128,13 +136,65 @@ def _record_chunks(session: Session, document: Document, result: Any, provider: 
                 section=item.section,
                 url=item.url,
                 commit_sha=item.commit_sha,
-                chunk_id=item.chunk_id,
+                # Only PDF evidence can reference the persisted PDF chunks.
+                # Official-code evidence commonly uses a repository-relative
+                # filename (for example ``config.py``) as its source locator;
+                # storing that value in this FK column breaks the whole run.
+                chunk_id=(
+                    persisted_chunk_ids[item.chunk_id]
+                    if item.source_type == EvidenceSource.PDF and item.chunk_id in chunk_ids
+                    else None
+                ),
             )
         )
 
 
+def _delete_search_material(session: Session, document_id: str) -> None:
+    """Delete a document's searchable rows in foreign-key-safe order.
+
+    Older versions stored globally colliding parser chunk ids.  The second
+    predicate removes any cross-document evidence left pointing at those
+    legacy rows before the chunks themselves are replaced.
+    """
+    stale_chunk_ids = select(Chunk.id).where(Chunk.document_id == document_id)
+    session.execute(
+        delete(Evidence).where(
+            or_(Evidence.document_id == document_id, Evidence.chunk_id.in_(stale_chunk_ids))
+        )
+    )
+    session.execute(delete(PaperSection).where(PaperSection.document_id == document_id))
+    session.execute(delete(ExternalSource).where(ExternalSource.document_id == document_id))
+    session.execute(delete(Chunk).where(Chunk.document_id == document_id))
+
+
+def _normalize_implicit_batch(spec: ModelGraphSpec) -> None:
+    """Make the framework batch axis explicit when the paper omits it on outputs."""
+    existing = {item.field for item in spec.assumptions}
+    inputs_are_batched = any(item.shape and item.shape[0] == "B" for item in spec.inputs)
+    if not inputs_are_batched:
+        return
+    for output in spec.outputs:
+        field = f"outputs.{output.name}.shape"
+        if output.shape and output.shape[0] != "B":
+            output.shape.insert(0, "B")
+            if field not in existing:
+                spec.assumptions.append(
+                    Assumption(
+                        field=field,
+                        value=output.shape,
+                        reason=(
+                            "The paper reports a per-sample output shape; PyTorch execution adds the "
+                            "batch axis already present on the model inputs."
+                        ),
+                        confidence=0.95,
+                    )
+                )
+                existing.add(field)
+
+
 def _auto_approve(spec: ModelGraphSpec) -> None:
     """Record paper omissions as assumptions for the default one-click flow."""
+    _normalize_implicit_batch(spec)
     existing = {item.field for item in spec.assumptions}
     for item in spec.unresolved:
         if not item.blocking:
@@ -191,10 +251,7 @@ def process_analysis(session: Session, run: AnalysisRun, settings: Settings) -> 
         result.spec.name = paper_title
     # Re-analysis replaces searchable material instead of retaining stale
     # chunks and duplicated section/source records from earlier attempts.
-    session.execute(delete(Evidence).where(Evidence.document_id == document.id))
-    session.execute(delete(PaperSection).where(PaperSection.document_id == document.id))
-    session.execute(delete(ExternalSource).where(ExternalSource.document_id == document.id))
-    session.execute(delete(Chunk).where(Chunk.document_id == document.id))
+    _delete_search_material(session, document.id)
 
     auto_generate = bool(result.spec.nodes)
     if auto_generate:
@@ -267,10 +324,11 @@ def _custom_modules(spec: ModelGraphSpec, provider: Any) -> dict[str, str]:
     rendered = render_model(spec, {})
     if not rendered.custom_operations:
         return {}
+    nodes = [node for node in spec.nodes if node.id in rendered.custom_operations]
+    responses = synthesize_custom_modules(provider, nodes)
     modules: dict[str, str] = {}
-    for node_id in rendered.custom_operations:
-        node = next(item for item in spec.nodes if item.id == node_id)
-        response = synthesize_custom_module(provider, node)
+    for node in nodes:
+        response = responses[node.id]
         node.params["class_name"] = response.class_name
         modules[node.id] = response.source
     return modules
@@ -331,6 +389,7 @@ def process_generation(session: Session, run: AnalysisRun, settings: Settings) -
     spec = ModelGraphSpec.model_validate(spec_record.spec_json)
     if spec_record.status != "approved":
         raise ValueError("generation requires an approved model structure")
+    _normalize_implicit_batch(spec)
 
     provider = build_provider(settings)
     append_event(run, "code_generation", 20, "rendering approved model structure")

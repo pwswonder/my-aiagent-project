@@ -7,7 +7,14 @@ from pathlib import Path
 
 import pytest
 
-from paper_agent_v2.generation.custom import CustomModuleResponse, synthesize_custom_module, validate_custom_module
+from paper_agent_v2.generation.custom import (
+    CustomModuleBatchItem,
+    CustomModuleBatchResponse,
+    CustomModuleResponse,
+    synthesize_custom_module,
+    synthesize_custom_modules,
+    validate_custom_module,
+)
 from paper_agent_v2.generation.package_writer import _shape_literal, write_package
 from paper_agent_v2.generation.renderer import render_model
 from paper_agent_v2.ir import EvidenceRef, EvidenceSource, ModelGraphSpec, NodeSpec, TensorSpec
@@ -164,8 +171,37 @@ def test_package_contains_provenance_and_scaffolding(tmp_path: Path) -> None:
     assert json.loads((package.path / "provenance.json").read_text())["spec_version"] == 3
 
 
+def test_package_generation_is_idempotent_after_an_interrupted_attempt(tmp_path: Path) -> None:
+    first = write_package(
+        approved_spec(),
+        tmp_path,
+        document_sha256="d" * 64,
+        spec_version=1,
+        provider="test",
+        model="static:test",
+    )
+    (first.path / "partial.tmp").write_text("incomplete", encoding="utf-8")
+
+    second = write_package(
+        approved_spec(),
+        tmp_path,
+        document_sha256="d" * 64,
+        spec_version=1,
+        provider="test",
+        model="static:test",
+    )
+
+    assert second.path == first.path
+    assert not (second.path / "partial.tmp").exists()
+    assert (second.path / "model.py").exists()
+
+
 def test_symbolic_image_inputs_use_forward_safe_spatial_defaults() -> None:
     assert _shape_literal(["B", 3, "H", "W"]) == "[2, 3, 224, 224]"
+
+
+def test_symbolic_time_series_inputs_use_forward_safe_defaults() -> None:
+    assert _shape_literal(["B", "M", "W_plus_1"]) == "[2, 4, 33]"
 
 
 def test_integer_example_inputs_do_not_use_randn(tmp_path: Path) -> None:
@@ -248,3 +284,190 @@ def test_custom_module_generation_retries_invalid_class_contract() -> None:
 
     assert response.class_name == "Actual"
     assert provider.calls == 2
+
+
+def test_novel_modules_are_generated_in_one_batch_call() -> None:
+    class Provider:
+        def __init__(self) -> None:
+            self.calls = 0
+
+        def generate_structured(self, schema, *, instructions, prompt):
+            self.calls += 1
+            return CustomModuleBatchResponse(
+                modules=[
+                    CustomModuleBatchItem(
+                        node_id=node_id,
+                        class_name=class_name,
+                        source=(
+                            f"from torch import nn\nclass {class_name}(nn.Module):\n"
+                            "    def forward(self, x): return x"
+                        ),
+                    )
+                    for node_id, class_name in (("first", "FirstBlock"), ("second", "SecondBlock"))
+                ]
+            )
+
+    nodes = [
+        NodeSpec(id="first", op="novel_a", inputs=["x"], output="a", evidence_ids=[]),
+        NodeSpec(id="second", op="novel_b", inputs=["a"], output="b", evidence_ids=[]),
+    ]
+    provider = Provider()
+
+    generated = synthesize_custom_modules(provider, nodes)  # type: ignore[arg-type]
+
+    assert provider.calls == 1
+    assert set(generated) == {"first", "second"}
+
+
+def test_patchtrad_common_ops_render_without_llm_and_run_backward() -> None:
+    import torch
+
+    evidence = [EvidenceRef(id="e1", source_type=EvidenceSource.PDF, page=2, quote="PatchTrAD graph.")]
+    spec = ModelGraphSpec(
+        name="PatchTrAD",
+        task="time series anomaly detection",
+        inputs=[TensorSpec(name="x_window", shape=["B", "M", "W_plus_1"])],
+        nodes=[
+            NodeSpec(
+                id="pad_last_obs",
+                op="repeat_pad_last_step",
+                inputs=["x_window"],
+                output="x_padded",
+                params={"pad_steps": "S"},
+                evidence_ids=["e1"],
+            ),
+            NodeSpec(
+                id="extract_patches",
+                op="sliding_window_patchify",
+                inputs=["x_padded"],
+                output="x_patches",
+                params={"patch_len": "P_len", "stride": "S"},
+                evidence_ids=["e1"],
+            ),
+            NodeSpec(
+                id="patch_projection",
+                op="linear",
+                inputs=["x_patches"],
+                output="x_proj",
+                params={"in_features": "P_len", "out_features": "D_model", "bias": "unknown"},
+                evidence_ids=["e1"],
+            ),
+            NodeSpec(
+                id="add_fixed_positional_encoding",
+                op="add_positional_encoding",
+                inputs=["x_proj"],
+                output="x_embed",
+                params={"shape": ["P_num", "D_model"]},
+                evidence_ids=["e1"],
+            ),
+            NodeSpec(
+                id="transformer_encoder_stack",
+                op="transformer_encoder",
+                inputs=["x_embed"],
+                output="z",
+                params={
+                    "num_layers": "n_layers",
+                    "d_model": "D_model",
+                    "num_heads": "n_heads",
+                    "d_ff": "d_ff",
+                    "dropout": "present",
+                },
+                evidence_ids=["e1"],
+            ),
+            NodeSpec(
+                id="modality_specific_patch_head",
+                op="per_modality_linear",
+                inputs=["z"],
+                output="x_recon_patches",
+                params={"in_features": "D_model", "out_features": "P_len"},
+                evidence_ids=["e1"],
+            ),
+            NodeSpec(
+                id="last_patch_select",
+                op="slice_last_patch_pair",
+                inputs=["x_patches", "x_recon_patches"],
+                output="last_patch_pair",
+                evidence_ids=["e1"],
+            ),
+            NodeSpec(
+                id="last_patch_reconstruction_error",
+                op="squared_error_reduce",
+                inputs=["last_patch_pair"],
+                output="anomaly_score",
+                evidence_ids=["e1"],
+            ),
+        ],
+        outputs=[TensorSpec(name="anomaly_score", shape=["B"])],
+        evidence=evidence,
+    ).approve()
+
+    rendered = render_model(spec)
+    assert rendered.custom_operations == []
+    namespace: dict[str, object] = {}
+    exec(rendered.source, namespace)  # noqa: S102 - generated source is the object under test
+    model = namespace["PaperModel"]()
+    output = model(torch.randn(2, 4, 33))
+    assert tuple(output.shape) == (2,)
+    output.mean().backward()
+
+
+def test_patchtrad_compound_ops_from_fast_extraction_are_deterministic() -> None:
+    import torch
+
+    evidence = [EvidenceRef(id="e1", source_type=EvidenceSource.PDF, page=2, quote="PatchTrAD graph.")]
+    spec = ModelGraphSpec(
+        name="PatchTrAD compact",
+        task="time series reconstruction",
+        inputs=[TensorSpec(name="x_window", shape=["B", "M", "W_plus_1"])],
+        nodes=[
+            NodeSpec(
+                id="patching",
+                op="patchify_over_time",
+                inputs=["x_window"],
+                output="x_patches",
+                params={"patch_len": "Plen", "stride": "S"},
+                evidence_ids=["e1"],
+            ),
+            NodeSpec(
+                id="proj_pe",
+                op="linear_add_positional_encoding",
+                inputs=["x_patches"],
+                output="patch_embed",
+                params={"Wproj": "Plen x Dmodel", "d_model": 128},
+                evidence_ids=["e1"],
+            ),
+            NodeSpec(
+                id="encoder",
+                op="transformer_encoder_stack",
+                inputs=["patch_embed"],
+                output="encoded",
+                params={"d_model": 128, "n_heads": 4, "n_layers": 3, "d_ff": 256},
+                evidence_ids=["e1"],
+            ),
+            NodeSpec(
+                id="reconstruct",
+                op="patch_reconstruction_projection",
+                inputs=["encoded"],
+                output="reconstructed",
+                params={"output_shape": ["M", "Pnum", "Plen"]},
+                evidence_ids=["e1"],
+            ),
+            NodeSpec(
+                id="reconstruction_error",
+                op="l2_patchwise_error",
+                inputs=["x_patches", "reconstructed"],
+                output="score",
+                evidence_ids=["e1"],
+            ),
+        ],
+        outputs=[TensorSpec(name="score", shape=["B"])],
+        evidence=evidence,
+    ).approve()
+
+    rendered = render_model(spec)
+    assert rendered.custom_operations == []
+    namespace: dict[str, object] = {}
+    exec(rendered.source, namespace)  # noqa: S102 - generated source is the object under test
+    output = namespace["PaperModel"]()(torch.randn(2, 4, 33))
+    assert tuple(output.shape) == (2,)
+    output.mean().backward()

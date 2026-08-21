@@ -196,6 +196,27 @@ def delete_document(document_id: str, session: Session = Depends(get_session)) -
 def reanalyze_document(document_id: str, session: Session = Depends(get_session)) -> DocumentAccepted:
     document = _get_or_404(session, Document, document_id)
     settings = get_settings()
+    previous_runs = session.scalars(
+        select(AnalysisRun).where(
+            AnalysisRun.document_id == document.id,
+            AnalysisRun.kind == "analysis",
+            AnalysisRun.status.in_(["queued", "running"]),
+        )
+    ).all()
+    for previous in previous_runs:
+        events = list(previous.event_log or [])
+        events.append(
+            {
+                "sequence": len(events) + 1,
+                "stage": "superseded",
+                "progress": previous.progress,
+                "message": "a newer analysis run replaced this run",
+            }
+        )
+        previous.event_log = events
+        previous.status = "superseded"
+        previous.stage = "superseded"
+        previous.locked_at = None
     run = AnalysisRun(
         document_id=document.id,
         kind="analysis",

@@ -114,6 +114,119 @@ class PVTEncoderSRA(nn.Module):
         for block in self.blocks:
             x = block(x)
         return x
+
+
+class RepeatPadLastObservation(nn.Module):
+    def __init__(self, pad_steps: int = 4) -> None:
+        super().__init__()
+        self.pad_steps = pad_steps
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        return torch.cat([x, x[..., -1:].expand(*x.shape[:-1], self.pad_steps)], dim=-1)
+
+
+class SlidingWindowPatchify(nn.Module):
+    def __init__(self, patch_length: int = 8, stride: int = 4) -> None:
+        super().__init__()
+        self.patch_length = patch_length
+        self.stride = stride
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        if x.shape[-1] < self.patch_length:
+            x = torch.nn.functional.pad(x, (0, self.patch_length - x.shape[-1]), mode="replicate")
+        return x.unfold(dimension=-1, size=self.patch_length, step=self.stride)
+
+
+class FixedPositionalEncoding(nn.Module):
+    def __init__(self, model_dim: int = 32) -> None:
+        super().__init__()
+        self.model_dim = model_dim
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        positions = torch.arange(x.shape[-2], device=x.device, dtype=x.dtype).unsqueeze(1)
+        frequencies = torch.exp(
+            torch.arange(0, self.model_dim, 2, device=x.device, dtype=x.dtype)
+            * (-torch.log(torch.tensor(10000.0, device=x.device, dtype=x.dtype)) / self.model_dim)
+        )
+        encoding = torch.zeros(x.shape[-2], self.model_dim, device=x.device, dtype=x.dtype)
+        encoding[:, 0::2] = torch.sin(positions * frequencies)
+        encoding[:, 1::2] = torch.cos(positions * frequencies[: encoding[:, 1::2].shape[1]])
+        return x + encoding
+
+
+class TimeSeriesTransformerEncoder(nn.Module):
+    def __init__(
+        self,
+        model_dim: int = 32,
+        num_heads: int = 4,
+        ff_dim: int = 64,
+        layers: int = 2,
+        dropout: float = 0.0,
+    ) -> None:
+        super().__init__()
+        layer = nn.TransformerEncoderLayer(
+            d_model=model_dim,
+            nhead=num_heads,
+            dim_feedforward=ff_dim,
+            dropout=dropout,
+            activation="gelu",
+            batch_first=True,
+        )
+        self.encoder = nn.TransformerEncoder(layer, num_layers=layers)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        leading_shape = x.shape[:-2]
+        encoded = self.encoder(x.reshape(-1, x.shape[-2], x.shape[-1]))
+        return encoded.reshape(*leading_shape, x.shape[-2], x.shape[-1])
+
+
+class PerChannelLinear(nn.Module):
+    def __init__(self, in_features: int = 32, out_features: int = 8, channels: int = 4) -> None:
+        super().__init__()
+        self.heads = nn.ModuleList([nn.Linear(in_features, out_features) for _ in range(channels)])
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        if x.dim() < 4 or x.shape[1] != len(self.heads):
+            return self.heads[0](x)
+        return torch.stack([head(x[:, index]) for index, head in enumerate(self.heads)], dim=1)
+
+
+class LastPatchPair(nn.Module):
+    def forward(
+        self, expected: torch.Tensor, reconstructed: torch.Tensor
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        return expected, reconstructed
+
+
+class SquaredErrorReduce(nn.Module):
+    def forward(
+        self,
+        expected: torch.Tensor | tuple[torch.Tensor, torch.Tensor],
+        reconstructed: torch.Tensor | None = None,
+    ) -> torch.Tensor:
+        if reconstructed is None:
+            expected, reconstructed = expected
+        error = (expected[..., -1, :] - reconstructed[..., -1, :]).square()
+        return error.reshape(error.shape[0], -1).sum(dim=1)
+
+
+class PatchwiseL2Error(nn.Module):
+    def forward(self, expected: torch.Tensor, reconstructed: torch.Tensor) -> torch.Tensor:
+        error = (expected - reconstructed).square()
+        return error.reshape(error.shape[0], -1).sum(dim=1)
+
+
+class WindowReconstructionError(nn.Module):
+    def forward(self, expected: torch.Tensor, reconstructed: torch.Tensor) -> torch.Tensor:
+        if expected.dim() + 1 == reconstructed.dim():
+            patch_length = reconstructed.shape[-1]
+            stride = 6
+            expected = torch.cat(
+                [expected, expected[..., -1:].expand(*expected.shape[:-1], stride)], dim=-1
+            ).unfold(-1, patch_length, stride)
+        patch_count = min(expected.shape[-2], reconstructed.shape[-2])
+        error = (expected[..., -patch_count:, :] - reconstructed[..., -patch_count:, :]).square()
+        return error.reshape(error.shape[0], -1).sum(dim=1)
 """
 
 
